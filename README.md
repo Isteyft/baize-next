@@ -1,13 +1,13 @@
-# Baize
+# Baize Next
 
 ## 项目简介
 
-Baize是一个使用monorepo结构构建的基础项目，采用pnpm workspace管理多个子项目和共享包。
+Baize Next 是一个使用monorepo结构构建的基础项目，采用pnpm workspace管理多个子项目和共享包。
 
 ## 目录结构
 
 ```
-baize/
+baize-next/
 ├── apps/                    # 应用目录
 │   ├── backend/             # 后端应用
 │   │   └── server/          # 服务器端代码

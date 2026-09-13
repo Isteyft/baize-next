@@ -1,0 +1,8 @@
+﻿# Rust/Tauri 构建产物
+src-tauri/target/
+src-tauri/gen/
+
+# 前端构建产物（根 .gitignore 已覆盖，此处补充）
+dist/
+node_modules/
+*.local
