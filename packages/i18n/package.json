@@ -1,0 +1,16 @@
+{
+  "name": "@baize-next/i18n",
+  "version": "1.0.0",
+  "description": "Baize Next 共享国际化文案与字段映射包",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Isteyft",
+  "license": "ISC"
+}

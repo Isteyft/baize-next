@@ -11,6 +11,7 @@
     "lint:staged": "lint-staged",
     "spellcheck": "cspell lint --dot --gitignore --color --cache --show-suggestions \"(packages|apps)/**/*.@(html|js|cjs|mjs|ts|tsx|css|scss|md)\"",
     "typecheck": "turbo typecheck",
+    "tauri": "pnpm --filter @baize-next/destop tauri",
     "commit": "git-cz",
     "prepare": "husky"
   },

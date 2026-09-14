@@ -3,6 +3,12 @@
 > 这是本项目（baize-next）的项目级规则，仅作用于本仓库，不写入用户全局配置。
 > Codex / 其他 AI 助手在本仓库工作时应同时遵循根目录 `AGENTS.md` 与本文件。
 
+## 架构规则
+
+-   **本项目是 monorepo 架构**，由多个应用（`apps/*`）与共享包（`packages/*`）组成，使用 pnpm workspace + Turbo 管理。
+-   子智能体处理本项目时必须先确认改动所属包（应用或共享包）边界，避免跨包误改。
+-   修改共享包 `packages/*` 时须评估对 `apps/*` 下游应用的影响。
+
 ## 项目结构
 
 -   pnpm workspace + Turbo 的 monorepo，包管理器固定为 `pnpm@10.19.0`

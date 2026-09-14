@@ -89,6 +89,12 @@ importers:
 
   apps/destop:
     dependencies:
+      '@baize-next/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@baize-next/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@tauri-apps/api':
         specifier: ^2.1.1
         version: 2.11.1
@@ -130,6 +136,8 @@ importers:
   apps/mobile: {}
 
   packages/core: {}
+
+  packages/i18n: {}
 
   packages/types: {}
 

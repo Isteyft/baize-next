@@ -4,6 +4,7 @@
 
 ## 项目概述
 
+-   **架构：monorepo**：本仓库采用 pnpm workspace + Turbo 的 monorepo 架构，由多个应用（`apps/*`）与共享包（`packages/*`）组成；子智能体应明确这不是单一应用，改动前先界定所属子包边界。
 -   项目名：`baize-next`，仓库：`git@github.com:Isteyft/monorepo-dev-starter.git`
 -   使用 pnpm workspace 的 monorepo 结构，包管理器固定为 `pnpm@10.19.0`
 -   使用 Turbo 管理 `typecheck` 任务

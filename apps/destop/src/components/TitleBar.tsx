@@ -6,15 +6,13 @@ import { WindowControls } from './WindowControls'
  * 隐藏系统默认标题栏后，由该组件提供拖拽、菜单与窗口控制。
  */
 interface TitleBarProps {
-    /** 触发“文件 > 打开文件”操作。 */
-    onOpenFile: () => void
-    /** 触发“文件 > 打开文件夹”操作。 */
-    onOpenFolder: () => void
-    /** 触发“关于 > 设置”（当前为 TODO）。 */
+    /** 触发“文件 > 打开项目”操作。 */
+    onOpenProject: () => void
+    /** 触发“关于 > 设置”菜单，打开独立设置窗口。 */
     onOpenSettings: () => void
 }
 
-export function TitleBar({ onOpenFile, onOpenFolder, onOpenSettings }: TitleBarProps) {
+export function TitleBar({ onOpenProject, onOpenSettings }: TitleBarProps) {
     return (
         <header
             data-tauri-drag-region="true"
@@ -24,17 +22,10 @@ export function TitleBar({ onOpenFile, onOpenFolder, onOpenSettings }: TitleBarP
                 <MenuDropdown label="文件">
                     <button
                         type="button"
-                        onClick={onOpenFile}
+                        onClick={onOpenProject}
                         className="block w-full px-3 py-1.5 text-left text-sm text-gray-200 hover:bg-gray-700"
                     >
-                        打开文件
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onOpenFolder}
-                        className="block w-full px-3 py-1.5 text-left text-sm text-gray-200 hover:bg-gray-700"
-                    >
-                        打开文件夹
+                        打开项目
                     </button>
                 </MenuDropdown>
                 <MenuDropdown label="关于">
@@ -43,7 +34,7 @@ export function TitleBar({ onOpenFile, onOpenFolder, onOpenSettings }: TitleBarP
                         onClick={onOpenSettings}
                         className="block w-full px-3 py-1.5 text-left text-sm text-gray-200 hover:bg-gray-700"
                     >
-                        设置（TODO）
+                        设置
                     </button>
                 </MenuDropdown>
                 <span className="ml-2 text-xs text-gray-500">Baize Next Destop</span>

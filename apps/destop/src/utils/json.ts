@@ -1,4 +1,19 @@
-import type { JsonDataset, JsonRecord, JsonValue } from '../types/json'
+import type { JsonDataset, JsonRecord, JsonValue, ProjectData, ProjectMod, ProjectModGroup, ProjectModGroupKey } from '@baize-next/types'
+
+/**
+ * JSON 解析与项目结构工具。
+ */
+
+/** mod 分组定义，顺序即左侧树展示顺序。 */
+export const PROJECT_GROUP_DEFS: { key: ProjectModGroupKey; label: string }[] = [
+    { key: 'config', label: '项目设置' },
+    { key: 'buff', label: 'buff' },
+    { key: 'item', label: '物品' },
+    { key: 'skill', label: '功法' },
+    { key: 'shenTong', label: '神通' },
+    { key: 'npcType', label: 'NPC类型' },
+    { key: 'npcWuDao', label: 'NPC悟道' },
+]
 
 /**
  * 读取一个 File 对象的文本内容。
@@ -48,10 +63,6 @@ function resolveRecordKey(data: Record<string, JsonValue>, fallback: string): st
 
 /**
  * 将单个 JSON 内容解析为一个数据集。
- * 支持三种形态：
- * 1. 数组（每个元素为一条记录）；
- * 2. 记录映射（每个字段值为一条记录）；
- * 3. 单个对象（作为唯一一条记录）。
  * @param name 数据集名称。
  * @param content JSON 文本。
  * @returns 解析后的数据集。
@@ -91,28 +102,7 @@ export function parseJsonContent(name: string, content: string): JsonDataset {
 }
 
 /**
- * 将目录中的一个或多个 JSON 文件解析为一个数据集。
- * @param folderName 文件夹名称。
- * @param files 目录下的 JSON 文件。
- * @returns 合并后的数据集，每个文件对应一条记录。
- */
-export async function parseFolderFiles(folderName: string, files: File[]): Promise<JsonDataset> {
-    const records: JsonRecord[] = []
-
-    for (const file of files) {
-        const content = await readFileAsText(file)
-        const parsed: unknown = JSON.parse(content)
-        if (!isRecordObject(parsed)) {
-            throw new Error(`文件 ${file.name} 不是对象，无法作为记录`)
-        }
-        records.push({ key: resolveRecordKey(parsed, file.name.replace(/\.json$/i, '')), data: parsed })
-    }
-
-    return { id: createDatasetId(folderName), name: folderName, kind: 'folder', records }
-}
-
-/**
- * 生成无碰撞的数据集 id。
+ * 生成无碰撞的 id。
  * @param base 基础名称。
  */
 export function createDatasetId(base: string): string {
@@ -124,7 +114,7 @@ export function createDatasetId(base: string): string {
 }
 
 /**
- * 返回数据集内所有记录字段的并集，保持出现顺序。
+ * 返回记录内所有字段的并集，保持出现顺序。
  * @param records 记录列表。
  */
 export function collectRecordFields(records: JsonRecord[]): string[] {
@@ -147,10 +137,97 @@ export function formatCellValue(value: JsonValue): string {
     return String(value)
 }
 
+/** 路径片段归类结果。 */
+interface ProjectFileMatch {
+    /** mod 文件夹名，例如 modXXX。 */
+    modName: string
+    /** 命中的数据分组。 */
+    groupKey: ProjectModGroupKey
+}
+
 /**
- * 将记录数据格式化为两空格缩进的 JSON 文本。
- * @param data 记录数据。
+ * 根据 webkitRelativePath 判断文件属于哪个 mod 的哪个数据分组。
+ * @param parts 按 / 切分后的相对路径片段。
  */
-export function formatRecordJson(data: Record<string, JsonValue>): string {
-    return JSON.stringify(data, null, 2)
+function matchProjectFile(parts: string[]): ProjectFileMatch | null {
+    const modIndex = parts.findIndex(part => part.startsWith('mod'))
+    if (modIndex < 0) return null
+
+    const modName = parts[modIndex] || '未命名mod'
+    const rest = parts.slice(modIndex + 1)
+
+    if (rest[0] === 'Config' && rest[1] === 'modConfig.json') {
+        return { modName, groupKey: 'config' }
+    }
+
+    if (rest[0] !== 'Data') return null
+
+    const tail = rest[rest.length - 1] || ''
+    if (rest[1] === 'BuffJsonData' && tail.endsWith('.json')) return { modName, groupKey: 'buff' }
+    if (rest[1] === 'ItemJsonData' && tail.endsWith('.json')) return { modName, groupKey: 'item' }
+    if (rest[1] === 'skillJsonData' && tail.endsWith('.json')) return { modName, groupKey: 'shenTong' }
+    if (rest[1] === 'StaticSkillJsonData.json') return { modName, groupKey: 'skill' }
+    if (rest[1] === 'NPCLeiXingDate.json') return { modName, groupKey: 'npcType' }
+    if (rest[1] === 'NPCWuDaoJson.json') return { modName, groupKey: 'npcWuDao' }
+
+    return null
+}
+
+/**
+ * 将项目根目录下的文件列表解析为项目结构。
+ * 识别 plugins/Next 下的 modXXX，并按需要汇总 BuffJsonData/ItemJsonData/skillJsonData。
+ * @param files webkitdirectory 选出的项目文件。
+ * @returns 解析后的项目结构。
+ */
+export async function parseProjectFromFiles(files: File[]): Promise<ProjectData> {
+    const projectName = files[0]?.webkitRelativePath.split('/')[0] || '未命名项目'
+    const grouped = new Map<string, Map<ProjectModGroupKey, File[]>>()
+
+    for (const file of files) {
+        if (!file.webkitRelativePath) continue
+        const parts = file.webkitRelativePath.split('/').filter(Boolean)
+        const match = matchProjectFile(parts)
+        if (!match) continue
+
+        const modMap = grouped.get(match.modName) ?? new Map<ProjectModGroupKey, File[]>()
+        const bucket = modMap.get(match.groupKey) ?? []
+        bucket.push(file)
+        modMap.set(match.groupKey, bucket)
+        grouped.set(match.modName, modMap)
+    }
+
+    const mods: ProjectMod[] = []
+    for (const [modName, groupFiles] of grouped) {
+        const groups: ProjectModGroup[] = []
+
+        for (const def of PROJECT_GROUP_DEFS) {
+            const bucket = groupFiles.get(def.key) ?? []
+            const records: JsonRecord[] = []
+
+            if (def.key === 'config' || def.key === 'skill' || def.key === 'npcType' || def.key === 'npcWuDao') {
+                // 单文件记录映射类型
+                for (const file of bucket) {
+                    const content = await readFileAsText(file)
+                    const dataset = parseJsonContent(file.name.replace(/\.json$/i, ''), content)
+                    records.push(...dataset.records)
+                }
+            } else {
+                // 目录下 1json1数据 类型，全部读取后合并为一组
+                for (const file of bucket) {
+                    const content = await readFileAsText(file)
+                    const parsed: unknown = JSON.parse(content)
+                    if (!isRecordObject(parsed)) {
+                        throw new Error(`文件 ${file.name} 不是对象，无法作为记录`)
+                    }
+                    records.push({ key: resolveRecordKey(parsed, file.name.replace(/\.json$/i, '')), data: parsed })
+                }
+            }
+
+            groups.push({ key: def.key, label: def.label, records })
+        }
+
+        mods.push({ id: createDatasetId(modName), name: modName, groups })
+    }
+
+    return { id: createDatasetId(projectName), name: projectName, mods }
 }

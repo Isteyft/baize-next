@@ -2,6 +2,10 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+## [2026-09-14]
+
+-   feat(destop): 设置界面改为独立窗口，由“关于 > 设置”打开，窗口内容暂为 TODO。
+
 ## [2026-09-13]
 
 -   feat(types): 解析 Data/NPCLeiXingDate.json 并生成 TypeScript 类型，存入 packages/types 共享类型包。
@@ -14,7 +18,42 @@
 -   chore: 基础项目名称由 baize 改为 baize-next，并同步更新 README、AGENTS.md 与 .codex/rules.md。
 -   chore: 子包作用域名由 `@baize/*` 统一改为 `@baize-next/*`，并同步更新 AGENTS.md 与 .codex/rules.md。## [2026-09-14]
 
+-   perf(destop): 滚动条改用 requestAnimationFrame 直接刷新滑块位移，移除 transform 过渡，滁涂更丝滑。
+
+-   style(destop): 细化滚动条样式（轨道收细为 10px，滑块改为蓝色，无滚动时轨道弱化）。
+
+-   fix(destop): 修复自定义滚动条首次渲染后不可见的问题（轨道常驻、根据内容溢出动态展示滑块）。
+
+-   style(destop): 滚动条改为独立轨道布局（纵/横向轨道占据固定宽高），不再遮挡表格内容。
+-   style(destop): 提升滚动条轨道与滑块对比度（青色滑块 + 灰色轨道），无滚动时自动隐藏轨道。
+
+-   style(destop): 调整数据表格列宽/行高，新增 min-w-max 以支持横向滚动。
+-   style(destop): 滚动条预留 padding，为蛇形轨道让位，不再遮挡表格内容。
+-   fix(destop): 数据表格过滤 id 字段，避免与 ID 列重复展示。
+
 -   feat(destop): 初始版本 create Tauri 桌面端应用 @baize-next/destop，基于 React 18 + TypeScript + Tailwind CSS。
 -   feat(destop): 实现三栏布局：左栏选择 JSON 数据集，中栏表格展示记录，右栏编辑当前记录 JSON 并实时更新。
 -   feat(destop): 隐藏系统默认标题栏，实现自定义任务栏（拖拽、关闭/最小化/最大化、文件/关于菜单）。
 -   feat(destop): 新增 Tauri v2 后端配置（tauri.conf.json、capabilities）与应用图标。
+-   feat(i18n): 初始化 @baize-next/i18n 共享子包
+-   refactor(i18n): locale JSON 调整为嵌套结构：{ 表名: { 字段名: 文案 } }，取消平铺 key。
+-   docs(i18n): 补充 BuffJsonData 字段的中文文案（包含字段说明映射。
+-   docs(i18n): 补充 ItemJsonData 字段的中文文案（包含字段说明映射）。
+-   docs(i18n): 补充 SkillJsonData 与 StaticSkillJsonData 字段的中文文案（包含字段说明映射）。
+-   docs(i18n): 补充 NPCLeiXingDate 与 NPCWuDaoJson 字段的中文文案（包含字段说明映射）。
+-   feat(types): 新增 ModConfig 类型与 i18n 文案，覆盖 mod 名称/作者/版本/介绍/设置及设置选项。，新增 en/zh-CN 文案映射，英文暂用字段名作为展示文案，中文复制英文待补充。
+-   docs: 在 AGENTS.md 与 .codex/rules.md 中补充 monorepo 架构规则，供子智能体识别仓库边界。
+-   docs: 修正 monorepo 架构规则中代码标记格式（`apps/*`、`packages/*`）。
+-   feat(destop): 打开项目目录（plugins/Next/_/mod_），解析项目结构并展示 mod 树。
+-   feat(destop): 同一 mod 下 BuffJsonData、ItemJsonData、skillJsonData 按“1json1数据”合并为一组数据展示。
+-   feat(destop): 左侧改造为项目结构树，展示 项目设置/buff/物品/功法/神通/NPC类型/NPC悟道。
+-   feat(destop): 中间表格表头改用 @baize-next/i18n 字段映射，右侧面板暂为 TODO。
+-   refactor(destop): 数据解析与类型定义迁移至独立子包 @baize-next/types。
+-   feat(i18n): 新增 @baize-next/i18n 独立子包，提供字段表头 i18n 映射。
+-   build: 根目录 package.json 新增 `tauri` 脚本，通过 `pnpm --filter @baize-next/destop tauri` 支持在仓库根目录执行 `pnpm tauri dev`。
+-   style(destop): 重写中间表格滚动条为通用 ScrollArea 组件，隐藏系统默认滚动条。
+-   style(destop): 表头保持单行，移除重复 key 列，使用记录 key 作为 ID 展示。
+-   style(destop): 左侧栏不再展示分组路径目录说明。
+-   style(destop): 全局禁用默认右键菜单。
+-   style(destop): 提升自定义滚动条可见性（加大滑块尺寸、提高对比度）。
+-   style(destop): 根容器禁用文本选择，仅表单元素（input/textarea/contenteditable）允许选中。

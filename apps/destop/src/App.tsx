@@ -1,160 +1,107 @@
-import { type ChangeEvent, useRef, useState } from 'react'
+import type { ProjectData, ProjectModGroupKey } from '@baize-next/types'
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { type ChangeEvent, useEffect, useRef, useState } from 'react'
 
 import { DataTable } from './components/DataTable'
-import { JsonEditor } from './components/JsonEditor'
 import { LeftPanel } from './components/LeftPanel'
+import { RightTodo } from './components/RightTodo'
 import { TitleBar } from './components/TitleBar'
-import type { JsonDataset, JsonValue } from './types/json'
-import { parseFolderFiles, parseJsonContent, readFileAsText } from './utils/json'
-
-/** 单文件输入允许的 JSON 扩展名过滤。 */
-const JSON_EXT = '.json,application/json'
+import { parseProjectFromFiles } from './utils/json'
 
 /**
  * 桌面端根组件。
- * 负责 JSON 文件导入、数据集与记录选择、以及编辑回写状态管理。
+ * 职责：打开整个项目目录，展示 plugins/Next 下各 mod 的项目树与分组数据。
  */
 export default function App() {
-    const [datasets, setDatasets] = useState<JsonDataset[]>([])
-    const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null)
+    const [project, setProject] = useState<ProjectData | null>(null)
+    const [selectedModId, setSelectedModId] = useState<string | null>(null)
+    const [selectedGroupKey, setSelectedGroupKey] = useState<ProjectModGroupKey | null>(null)
     const [selectedRecordKey, setSelectedRecordKey] = useState<string | null>(null)
-    const [settingsOpen, setSettingsOpen] = useState(false)
 
-    const fileInputRef = useRef<HTMLInputElement>(null)
-    const folderInputRef = useRef<HTMLInputElement>(null)
+    const projectInputRef = useRef<HTMLInputElement | null>(null)
 
-    const selectedDataset = datasets.find(dataset => dataset.id === selectedDatasetId) ?? null
-    const selectedRecord = selectedDataset?.records.find(record => record.key === selectedRecordKey) ?? null
+    const selectedMod = project?.mods.find(mod => mod.id === selectedModId) ?? null
+    const selectedGroup = selectedMod?.groups.find(group => group.key === selectedGroupKey) ?? null
 
-    /** 在标题栏“文件 > 打开文件”点击时触发单文件多选。 */
-    function handleOpenFile(): void {
-        fileInputRef.current?.click()
+    // 项目根目录选择控件需要 webkitdirectory 支持整目录读取。
+    useEffect(() => {
+        projectInputRef.current?.setAttribute('webkitdirectory', '')
+    }, [])
+
+    /** 让“文件 > 打开项目”触发项目目录选择。 */
+    function handleOpenProject(): void {
+        projectInputRef.current?.click()
     }
 
-    /** 在标题栏“文件 > 打开文件夹”点击时触发文件夹目录选择。 */
-    function handleOpenFolder(): void {
-        folderInputRef.current?.click()
-    }
-
-    /** 处理单文件/多文件 JSON 导入。 */
-    async function handleFilesChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    /** 选择项目根目录后解析项目结构。 */
+    async function handleProjectChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
         const files = event.target.files
         if (!files || files.length === 0) return
         try {
-            const imported: JsonDataset[] = []
-            for (const file of Array.from(files)) {
-                const content = await readFileAsText(file)
-                imported.push(parseJsonContent(file.name.replace(/\.json$/i, ''), content))
-            }
-            mergeDatasets(imported)
+            const parsedProject = await parseProjectFromFiles(Array.from(files))
+            setProject(parsedProject)
+            const firstMod = parsedProject.mods[0] ?? null
+            const firstGroup = firstMod?.groups[0] ?? null
+            setSelectedModId(firstMod?.id ?? null)
+            setSelectedGroupKey(firstGroup?.key ?? null)
+            setSelectedRecordKey(firstGroup?.records[0]?.key ?? null)
         } catch (error) {
-            window.alert(error instanceof Error ? `导入失败：${error.message}` : '导入失败')
+            window.alert(error instanceof Error ? `打开项目失败：${error.message}` : '打开项目失败')
         } finally {
             event.target.value = ''
         }
     }
 
-    /** 处理文件夹 JSON 批导入。 */
-    async function handleFolderChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-        const files = event.target.files
-        if (!files || files.length === 0) return
+    /** 切换到某个 mod 下的数据分组。 */
+    function handleSelectGroup(modId: string, groupKey: ProjectModGroupKey): void {
+        const mod = project?.mods.find(item => item.id === modId)
+        const group = mod?.groups.find(item => item.key === groupKey)
+        setSelectedModId(modId)
+        setSelectedGroupKey(groupKey)
+        setSelectedRecordKey(group?.records[0]?.key ?? null)
+    }
+
+    /** 从“设置”菜单打开独立设置窗口。 */
+    async function handleOpenSettings(): Promise<void> {
         try {
-            const jsonFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.json'))
-            if (jsonFiles.length === 0) {
-                window.alert('所选目录中没有 .json 文件')
-                return
-            }
-            const folderName = jsonFiles[0]?.webkitRelativePath.split('/')[0] || '未命名目录'
-            const imported = await parseFolderFiles(folderName, jsonFiles)
-            mergeDatasets([imported])
-        } catch (error) {
-            window.alert(error instanceof Error ? `导入失败：${error.message}` : '导入失败')
-        } finally {
-            event.target.value = ''
+            const existing = await WebviewWindow.getByLabel('settings')
+            if (existing) return
+
+            new WebviewWindow('settings', {
+                url: 'index.html?window=settings',
+                title: '设置',
+                width: 560,
+                height: 420,
+                minWidth: 420,
+                minHeight: 320,
+                center: true,
+            })
+        } catch {
+            // 非 Tauri 环境（如浏览器预览）时忽略，避免点击设置按钮崩溃。
         }
-    }
-
-    /** 合并新数据集并自动选中第一个。 */
-    function mergeDatasets(newDatasets: JsonDataset[]): void {
-        const nextId = newDatasets[0]?.id ?? null
-        const nextKey = newDatasets[0]?.records[0]?.key ?? null
-        setDatasets(prev => [...prev, ...newDatasets])
-        if (nextId) {
-            setSelectedDatasetId(nextId)
-            setSelectedRecordKey(nextKey)
-        }
-    }
-
-    /** 切换当前数据集并重置记录选择。 */
-    function handleDatasetSelect(id: string): void {
-        setSelectedDatasetId(id)
-        const dataset = datasets.find(item => item.id === id)
-        setSelectedRecordKey(dataset?.records[0]?.key ?? null)
-    }
-
-    /** 更新当前数据集内指定记录的 JSON 数据。 */
-    function handleRecordUpdate(key: string, data: Record<string, JsonValue>): void {
-        if (!selectedDatasetId) return
-        setDatasets(prev =>
-            prev.map(dataset =>
-                dataset.id === selectedDatasetId
-                    ? {
-                          ...dataset,
-                          records: dataset.records.map(record => (record.key === key ? { ...record, data } : record)),
-                      }
-                    : dataset
-            )
-        )
     }
 
     return (
-        <div className="flex h-full flex-col bg-gray-950 text-gray-100">
-            <TitleBar onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} onOpenSettings={() => setSettingsOpen(true)} />
+        <div className="flex h-full select-none flex-col bg-gray-950 text-gray-100" onContextMenu={event => event.preventDefault()}>
+            <TitleBar onOpenProject={handleOpenProject} onOpenSettings={() => void handleOpenSettings()} />
             <main className="flex min-h-0 flex-1">
-                <LeftPanel datasets={datasets} selectedId={selectedDatasetId} onSelect={handleDatasetSelect} />
-                <DataTable records={selectedDataset?.records ?? []} selectedKey={selectedRecordKey} onSelect={setSelectedRecordKey} />
-                <JsonEditor record={selectedRecord} onUpdate={handleRecordUpdate} />
+                <LeftPanel
+                    project={project}
+                    selectedModId={selectedModId}
+                    selectedGroupKey={selectedGroupKey}
+                    onSelectGroup={handleSelectGroup}
+                />
+                <DataTable
+                    groupKey={selectedGroupKey}
+                    records={selectedGroup?.records ?? []}
+                    selectedKey={selectedRecordKey}
+                    onSelect={setSelectedRecordKey}
+                />
+                <RightTodo />
             </main>
 
-            {/* 隐藏的原生文件选择控件 */}
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept={JSON_EXT}
-                multiple
-                className="hidden"
-                onChange={event => void handleFilesChange(event)}
-            />
-            {/* webkitdirectory 允许选择整个目录 */}
-            <input
-                ref={node => {
-                    folderInputRef.current = node
-                    node?.setAttribute('webkitdirectory', '')
-                }}
-                type="file"
-                className="hidden"
-                onChange={event => void handleFolderChange(event)}
-            />
-
-            {/* 设置占位弹窗（TODO） */}
-            {settingsOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSettingsOpen(false)}>
-                    <div
-                        className="w-80 rounded-lg border border-gray-700 bg-gray-800 p-5 shadow-xl"
-                        onClick={event => event.stopPropagation()}
-                    >
-                        <h3 className="text-base font-medium text-gray-100">设置</h3>
-                        <p className="mt-2 text-sm text-gray-400">设置功能 TODO，待后续版本实现。</p>
-                        <button
-                            type="button"
-                            onClick={() => setSettingsOpen(false)}
-                            className="mt-4 rounded-md bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-500"
-                        >
-                            关闭
-                        </button>
-                    </div>
-                </div>
-            )}
+            {/* 隐藏的项目根目录选择输入框 */}
+            <input ref={projectInputRef} type="file" className="hidden" onChange={event => void handleProjectChange(event)} />
         </div>
     )
 }

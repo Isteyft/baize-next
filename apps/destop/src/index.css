@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -10,4 +10,20 @@
         margin: 0;
         overflow: hidden;
     }
+}
+
+/* 隐藏自定义滚动区域的原生滚动条（仍可滚动） */
+.scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
+}
+/* 根容器已禁用全局文本选择，表单元素仍需允许选择 */
+input,
+textarea,
+[contenteditable='true'] {
+    -webkit-user-select: text;
+    user-select: text;
 }
