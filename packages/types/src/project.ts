@@ -29,7 +29,7 @@ export interface JsonDataset {
 }
 
 /** mod 下可识别的数据分组键。 */
-export type ProjectModGroupKey = 'config' | 'buff' | 'item' | 'skill' | 'shenTong' | 'npcType' | 'npcWuDao'
+export type ProjectModGroupKey = 'config' | 'buff' | 'item' | 'skill' | 'shenTong' | 'npcType' | 'npcWuDao' | 'preload'
 
 /** mod 下的一个数据分组。 */
 export interface ProjectModGroup {

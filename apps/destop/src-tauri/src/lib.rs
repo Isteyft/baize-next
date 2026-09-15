@@ -1,6 +1,7 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 
 use serde::Serialize;
+use std::io::Write;
 use std::path::Path;
 
 #[derive(Serialize)]
@@ -51,10 +52,66 @@ fn read_project_files(root_path: String) -> Result<Vec<ProjectFileEntry>, String
     Ok(files)
 }
 
+
+
+#[tauri::command]
+fn read_json_file(path: String) -> Result<ProjectFileEntry, String> {
+    let file_path = Path::new(&path);
+    if !file_path.is_file() {
+        return Err("Selected path is not a file".into());
+    }
+    let is_json = file_path
+        .extension()
+        .map(|ext| ext.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+    if !is_json {
+        return Err("Selected file is not a JSON file".into());
+    }
+    let content = std::fs::read_to_string(file_path).map_err(|error| error.to_string())?;
+    let relative_path = file_path
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.clone());
+    Ok(ProjectFileEntry { relative_path, content })
+}
+
+
+fn error_log_path() -> Result<std::path::PathBuf, String> {
+    std::env::current_dir()
+        .map(|dir| dir.join("error.log"))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn reset_error_log() -> Result<(), String> {
+    let path = error_log_path()?;
+    std::fs::write(&path, "").map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn append_error_log(content: String) -> Result<(), String> {
+    let path = error_log_path()?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    file.write_all(content.as_bytes()).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn read_error_log() -> Result<String, String> {
+    let path = error_log_path()?;
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    std::fs::read_to_string(&path).map_err(|error| error.to_string())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![read_project_files])
+        .invoke_handler(tauri::generate_handler![read_project_files, read_json_file, reset_error_log, append_error_log, read_error_log])
         .run(tauri::generate_context!())
         .expect("failed to run baize-next-destop");
 }

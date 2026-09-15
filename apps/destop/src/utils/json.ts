@@ -48,6 +48,52 @@ export function isRecordMap(value: unknown): value is Record<string, Record<stri
     return entries.length > 0 && entries.every(isRecordObject)
 }
 
+function parseJsonText(text: string): unknown {
+    const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+    try {
+        return JSON.parse(source)
+    } catch {
+        return JSON.parse(stripJsonTrailingCommas(source))
+    }
+}
+
+function stripJsonTrailingCommas(text: string): string {
+    let result = ''
+    let inString = false
+    let escaped = false
+    for (let index = 0; index < text.length; index += 1) {
+        const char = text[index]
+        if (inString) {
+            result += char
+            if (escaped) {
+                escaped = false
+            } else if (char === '\\') {
+                escaped = true
+            } else if (char === '"') {
+                inString = false
+            }
+            continue
+        }
+        if (char === '"') {
+            inString = true
+            result += char
+            continue
+        }
+        if (char === ',') {
+            let next = index + 1
+            while (next < text.length && /\s/.test(text[next] ?? '')) {
+                next += 1
+            }
+            if (text[next] === '}' || text[next] === ']') {
+                index = next - 1
+                continue
+            }
+        }
+        result += char
+    }
+    return result
+}
+
 /**
  * 获取一条记录的稳定标识：优先取 id，其次取对象首键，最后回退为 index。
  * @param data 记录数据。
@@ -69,7 +115,7 @@ function resolveRecordKey(data: Record<string, JsonValue>, fallback: string): st
  * @throws 当 JSON 无法解析或不满足支持的形态时抛出错误。
  */
 export function parseJsonContent(name: string, content: string): JsonDataset {
-    const parsed: unknown = JSON.parse(content)
+    const parsed: unknown = parseJsonText(content)
 
     if (Array.isArray(parsed)) {
         const records: JsonRecord[] = parsed.map((item, index) => {
@@ -215,7 +261,7 @@ export async function parseProjectFromFiles(files: File[]): Promise<ProjectData>
                 // 目录下 1json1数据 类型，全部读取后合并为一组
                 for (const file of bucket) {
                     const content = await readFileAsText(file)
-                    const parsed: unknown = JSON.parse(content)
+                    const parsed: unknown = parseJsonText(content)
                     if (!isRecordObject(parsed)) {
                         throw new Error(`文件 ${file.name} 不是对象，无法作为记录`)
                     }
@@ -284,7 +330,7 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
             } else {
                 for (const entry of bucket) {
                     const fileName = entry.relativePath.split('/').pop() ?? 'root'
-                    const parsed: unknown = JSON.parse(entry.content)
+                    const parsed: unknown = parseJsonText(entry.content)
                     if (!isRecordObject(parsed)) {
                         throw new Error(`文件 ${fileName} 不是对象，无法作为记录`)
                     }
@@ -300,3 +346,52 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
 
     return { id: createDatasetId(projectName), name: projectName, mods }
 }
+
+/** 预加载分组的标签。*/
+const PRELOAD_MOD_NAME = 'Editor 预加载'
+const PRELOAD_GROUP_LABEL = '预加载'
+
+function preloadEntryName(entry: ProjectFileEntry): string {
+    const fileName = entry.relativePath.split('/').pop() ?? entry.relativePath
+    return fileName.replace(/\.json$/i, '')
+}
+
+/** 将单个 JSON 文件解析为一个预加载 mod。*/
+export function parsePreloadJsonEntry(entry: ProjectFileEntry): ProjectData {
+    const name = preloadEntryName(entry)
+    const dataset = parseJsonContent(name, entry.content)
+    const mod: ProjectMod = {
+        id: createDatasetId(name),
+        name,
+        groups: [{ key: 'preload', label: PRELOAD_GROUP_LABEL, records: dataset.records }],
+    }
+    return { id: createDatasetId(`preload-${name}`), name, mods: [mod] }
+}
+
+/** 将目录中的 mod JSON 归纳为已识别的 mod 结构，剩余 JSON 统一放入预加载分组。*/
+export async function parsePreloadProjectFromEntries(rootPath: string, entries: ProjectFileEntry[]): Promise<ProjectData> {
+    const project = await parseProjectFromEntries(rootPath, entries)
+    const unmatched = entries.filter(entry => {
+        const parts = entry.relativePath.split('/').filter(Boolean)
+        return !matchProjectFile(parts)
+    })
+    if (unmatched.length === 0) return project
+
+    const records: JsonRecord[] = []
+    for (const entry of unmatched) {
+        records.push(...parseJsonContent(preloadEntryName(entry), entry.content).records)
+    }
+    const mods =
+        records.length > 0
+            ? [
+                  ...project.mods,
+                  {
+                      id: createDatasetId('editor-preload'),
+                      name: PRELOAD_MOD_NAME,
+                      groups: [{ key: 'preload' as const, label: PRELOAD_GROUP_LABEL, records }],
+                  },
+              ]
+            : project.mods
+    return { ...project, mods }
+}
+

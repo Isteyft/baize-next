@@ -1,4 +1,5 @@
 export * from './data/BuffJsonData'
+export * from './data/meta'
 export * from './data/ItemJsonData'
 export * from './data/ModConfig'
 export * from './data/NPCLeiXingDate'
@@ -8,3 +9,4 @@ export * from './data/SkillJsonData'
 export * from './data/StaticSkillJsonData'
 export * from './enums'
 export * from './project'
+

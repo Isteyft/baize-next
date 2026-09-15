@@ -3,8 +3,26 @@
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
 ## [2026-09-15]
-
+- fix(destop): JSON 解析兼容 BOM 与尾逗号，修复 Meta 目录预加载失败。
 -   fix(destop): 中间表格按分组类型显示主键列，无主键字段的数据不再生成伪 ID。
+- style(destop): Tip 提示改为页面顶部居中显示。
+- feat(destop): 新增可复用的 Tip 组件，设置窗口保存后显示“已保存”提示。
+- feat(destop): Meta 预加载改为多条目列表，支持加号添加 JSON 或目录并选择路径。
+- style(destop): 设置窗口保存按钮固定到右下角。
+- fix(destop): error-log 窗口加入 Tauri capabilities，修复拖拽、最小化、最大化与关闭按钮。
+- fix(destop): 启动预加载失败也会写入 error.log。
+- feat(destop): 错误提示移至主界面底部，不阻断主界面操作。
+- feat(destop): 关于菜单新增错误日志窗口，与设置窗口统一为独立新窗口。
+- feat(destop): 新增 error.log 本地读写命令，每次启动重写，当次运行错误勾存至本地文件。
+- fix(destop): 预加载失败时不再阻断进入主界面，改为顶部非阻断提示。
+- feat(destop): 新增启动预加载界面，默认加载 ./Editor 下的 mod JSON，支持 JSON 文件或目录模式。
+- feat(destop): 设置中新增 JSON 预加载来源，可选择加载 JSON 或加载目录并持久化路径。
+- feat(types): 新增 PreloadSourceMode 枚举与 ProjectSettings 预加载字段，ProjectModGroupKey 增加 preload 分组。
+- feat(destop): Tauri 后端新增 read_json_file 命令，支持单个 JSON 文件预加载。
+
+- chore: Data/ 目录加入 .gitignore 并从 git 索引移除，磁盘数据保留本地。
+- feat(types): 新增 Data/Meta 元数据 JSON 对应的 TypeScript 类型，导出为 packages/types/src/data/meta。
+
 -   feat(destop): 设置窗口新增“语言”下拉框，按主题模式持久化并跨窗口同步。
 -   feat(types): 新增 AppLanguage 枚举，并将 ProjectSettings.language 提供给设置存储。
 -   docs(i18n): 补充 en/zh-CN 语言设置相关文案。
@@ -83,3 +101,9 @@
 -   style(destop): 全局禁用默认右键菜单。
 -   style(destop): 提升自定义滚动条可见性（加大滑块尺寸、提高对比度）。
 -   style(destop): 根容器禁用文本选择，仅表单元素（input/textarea/contenteditable）允许选中。
+
+
+
+
+
+

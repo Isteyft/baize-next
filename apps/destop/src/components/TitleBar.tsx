@@ -1,40 +1,48 @@
 import { MenuDropdown } from './MenuDropdown'
 import { WindowControls } from './WindowControls'
 
-/**
- * 自定义任务栏标题栏。
- * 隐藏系统默认标题栏后，由该组件提供拖拽、菜单与窗口控制。
- */
+const FILE_TEXT = '\u6587\u4ef6'
+const OPEN_PROJECT_TEXT = '\u6253\u5f00\u9879\u76ee'
+const ABOUT_TEXT = '\u5173\u4e8e'
+const SETTINGS_TEXT = '\u8bbe\u7f6e'
+const ERROR_LOG_TEXT = '\u9519\u8bef\u65e5\u5fd7'
+
 interface TitleBarProps {
-    /** 触发“文件 > 打开项目”操作。 */
     onOpenProject: () => void
-    /** 触发“关于 > 设置”菜单，打开独立设置窗口。 */
     onOpenSettings: () => void
+    onOpenErrorLog: () => void
 }
 
-export function TitleBar({ onOpenProject, onOpenSettings }: TitleBarProps) {
+export function TitleBar({ onOpenProject, onOpenSettings, onOpenErrorLog }: TitleBarProps) {
     return (
         <header
             data-tauri-drag-region="true"
             className="flex h-10 shrink-0 select-none items-center justify-between bg-panel text-ink-soft"
         >
             <nav className="flex h-full items-center">
-                <MenuDropdown label="文件">
+                <MenuDropdown label={FILE_TEXT}>
                     <button
                         type="button"
                         onClick={onOpenProject}
                         className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover"
                     >
-                        打开项目
+                        {OPEN_PROJECT_TEXT}
                     </button>
                 </MenuDropdown>
-                <MenuDropdown label="关于">
+                <MenuDropdown label={ABOUT_TEXT}>
                     <button
                         type="button"
                         onClick={onOpenSettings}
                         className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover"
                     >
-                        设置
+                        {SETTINGS_TEXT}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onOpenErrorLog}
+                        className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover"
+                    >
+                        {ERROR_LOG_TEXT}
                     </button>
                 </MenuDropdown>
                 <span className="ml-2 text-xs text-ink-subtle">Baize Next Destop</span>

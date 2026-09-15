@@ -4,6 +4,7 @@
     "description":  "主/设置窗口默认权限：允许窗口控制、拖拽区域与跨窗口事件通信。",
     "windows":  [
                     "main",
+                    "error-log",
                     "settings"
                 ],
     "permissions":  [

@@ -4,16 +4,17 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 
 import App from './App'
+import { ErrorLogWindow } from './components/ErrorLogWindow'
 import { SettingsWindow } from './components/SettingsWindow'
 import { applyLanguage, getSavedLanguage } from './language'
 import { applyTheme, getSavedTheme } from './theme'
 
-// 启动即应用已保存的主题，避免闪烁。
 applyTheme(getSavedTheme())
 applyLanguage(getSavedLanguage())
 
-/** 渲染 React 18 根组件到 #root。 */
-const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings'
-const root = isSettingsWindow ? <SettingsWindow /> : <App />
+const params = new URLSearchParams(window.location.search)
+const isSettingsWindow = params.get('window') === 'settings'
+const isErrorLogWindow = params.get('window') === 'error-log'
+const root = isErrorLogWindow ? <ErrorLogWindow /> : isSettingsWindow ? <SettingsWindow /> : <App />
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode>{root}</React.StrictMode>)
