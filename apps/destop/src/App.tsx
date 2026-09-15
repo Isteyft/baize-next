@@ -1,4 +1,4 @@
-import { PreloadSourceMode, type JsonValue, type ProjectData, type ProjectModGroupKey } from '@baize-next/types'
+import { type JsonValue, PreloadSourceMode, type ProjectData, type ProjectModGroupKey } from '@baize-next/types'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -108,7 +108,12 @@ export default function App() {
 
     async function handleOpenProject(): Promise<void> {
         try {
-            const selected = await open({ directory: true, recursive: true, multiple: false, title: '\u9009\u62e9\u9879\u76ee\u76ee\u5f55' })
+            const selected = await open({
+                directory: true,
+                recursive: true,
+                multiple: false,
+                title: '\u9009\u62e9\u9879\u76ee\u76ee\u5f55',
+            })
             if (typeof selected !== 'string' || !selected) return
             const entries = await invoke<ProjectFileEntry[]>('read_project_files', { rootPath: selected })
             const parsedProject = await parseProjectFromEntries(selected, entries)
@@ -237,7 +242,9 @@ export default function App() {
             </main>
             {bootError ? (
                 <div className="flex shrink-0 items-center gap-2 border-t border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">
-                    <span>{PRELOAD_FAILED_LABEL}: {bootError}</span>
+                    <span>
+                        {PRELOAD_FAILED_LABEL}: {bootError}
+                    </span>
                 </div>
             ) : null}
         </div>

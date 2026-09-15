@@ -28,17 +28,29 @@ export function StartupLoading({ status, path, modeLabel, message, onRetry, onCo
                 {isError && message ? <p className="mt-3 break-words text-xs text-danger">{message}</p> : null}
                 <div className="mt-5 flex items-center justify-center gap-2">
                     {isError && onContinue ? (
-                        <button type="button" onClick={onContinue} className="rounded-md bg-panel px-3 py-1.5 text-xs text-ink-soft hover:bg-raised">
+                        <button
+                            type="button"
+                            onClick={onContinue}
+                            className="rounded-md bg-panel px-3 py-1.5 text-xs text-ink-soft hover:bg-raised"
+                        >
                             {CONTINUE_TEXT}
                         </button>
                     ) : null}
                     {onRetry ? (
-                        <button type="button" onClick={onRetry} className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink hover:bg-accent-hover">
+                        <button
+                            type="button"
+                            onClick={onRetry}
+                            className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink hover:bg-accent-hover"
+                        >
                             {RETRY_TEXT}
                         </button>
                     ) : null}
                     {onOpenSettings ? (
-                        <button type="button" onClick={onOpenSettings} className="rounded-md px-3 py-1.5 text-xs text-ink-soft hover:bg-raised">
+                        <button
+                            type="button"
+                            onClick={onOpenSettings}
+                            className="rounded-md px-3 py-1.5 text-xs text-ink-soft hover:bg-raised"
+                        >
                             {SETTINGS_TEXT}
                         </button>
                     ) : null}

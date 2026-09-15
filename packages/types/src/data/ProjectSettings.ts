@@ -3,8 +3,8 @@
  */
 
 import { AppLanguage } from '../enums/AppLanguage'
-import { ThemeColor } from '../enums/ThemeColor'
 import { PreloadSourceMode } from '../enums/PreloadSourceMode'
+import { ThemeColor } from '../enums/ThemeColor'
 
 export interface ProjectSettings {
     /** 主题色（亮色 / 暗色 / 青黑色） */

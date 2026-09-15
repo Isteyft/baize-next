@@ -26,4 +26,3 @@ export interface ArtifactTypeGroupPropertyDescData {
     6: string
     7: string
 }
-

@@ -1,4 +1,4 @@
-﻿AppWindow
+AppWindow
 baize
 baize-next
 baizerenyou
@@ -30,3 +30,6 @@ webkitdirectory
 webview
 wudao
 yuanying
+huan
+zhong
+zhen

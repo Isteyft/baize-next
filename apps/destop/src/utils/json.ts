@@ -394,4 +394,3 @@ export async function parsePreloadProjectFromEntries(rootPath: string, entries: 
             : project.mods
     return { ...project, mods }
 }
-

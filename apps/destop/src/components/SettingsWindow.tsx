@@ -1,4 +1,4 @@
-import { PreloadSourceMode, type AppLanguage, type ThemeColor } from '@baize-next/types'
+import { type AppLanguage, PreloadSourceMode, type ThemeColor } from '@baize-next/types'
 import { open } from '@tauri-apps/plugin-dialog'
 import { useEffect, useState } from 'react'
 
@@ -8,13 +8,13 @@ import {
     DEFAULT_PRELOAD_PATH,
     getSavedPreloadSettings,
     PRELOAD_MODE_OPTIONS,
-    savePreloadSettings,
     type PreloadSourceEntry,
+    savePreloadSettings,
 } from '../preload'
 import { getSavedTheme, setTheme as persistTheme, subscribeTheme, THEME_OPTIONS } from '../theme'
 import { Select, type SelectOption } from './Select'
-import { WindowControls } from './WindowControls'
 import { Tip, type TipTone } from './Tip'
+import { WindowControls } from './WindowControls'
 
 const THEME_SELECT_OPTIONS: SelectOption<ThemeColor>[] = THEME_OPTIONS.map(option => ({
     value: option.value,
@@ -115,7 +115,12 @@ export function SettingsWindow() {
                 <section className="space-y-2">
                     <h2 className="text-sm font-medium text-ink-muted">{LANGUAGE_SECTION_TITLE}</h2>
                     <div className="max-w-xs">
-                        <Select value={language} options={LANGUAGE_SELECT_OPTIONS} onChange={setLanguage} aria-label={LANGUAGE_SECTION_TITLE} />
+                        <Select
+                            value={language}
+                            options={LANGUAGE_SELECT_OPTIONS}
+                            onChange={setLanguage}
+                            aria-label={LANGUAGE_SECTION_TITLE}
+                        />
                     </div>
                 </section>
                 <section className="space-y-2">

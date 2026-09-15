@@ -9,4 +9,3 @@ export * from './data/SkillJsonData'
 export * from './data/StaticSkillJsonData'
 export * from './enums'
 export * from './project'
-
