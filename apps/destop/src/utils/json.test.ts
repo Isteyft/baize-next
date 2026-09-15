@@ -9,6 +9,7 @@ import {
     isRecordObject,
     parseJsonContent,
     parseMetaJsonEntry,
+    parseModPreloadJsonEntry,
     parseProjectFromEntries,
     type ProjectFileEntry,
     projectNameFromPath,
@@ -130,6 +131,15 @@ describe('project JSON mapping', () => {
 
         expect(dataset.name).toBe('example')
         expect(dataset.records[0]?.key).toBe('one')
+    })
+
+    it('labels mod preload json groups as mod preload', () => {
+        const project = parseModPreloadJsonEntry({
+            relativePath: 'preload.json',
+            content: '[{"id":"one"}]',
+        })
+
+        expect(project.mods[0]?.groups[0]?.label).toBe('mod 预加载')
     })
 
     it('serializes project groups to the expected file paths', () => {

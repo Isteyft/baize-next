@@ -4,6 +4,12 @@
 
 ## [2026-09-15]
 
+-   feat(destop): JSON 编辑器中的数组字段改为紧凑表格，支持逐项编辑、添加与删除数组项。
+-   test(destop): 补充 JsonEditor 数组项增删改测试。
+
+-   fix(destop): Meta 预加载不再作为预加载数据显示，改为展示 mod 预加载。
+-   fix(destop): mod 预加载 JSON 分组标签改为“mod 预加载”。
+-   test(destop): 补充 mod 预加载展示与解析测试。
 -   test(destop): add Vitest tests for json/preload/theme/language utilities and DataTable/JsonEditor components.
 -   style(destop): 绉婚櫎 JSON 缂栬緫鍣ㄩ《閮ㄧ殑璁板綍 key/id 涓庡瓧娈垫暟閲忎俊鎭潯銆?
 -   feat(types): 鏂板 Data/TuJianChunWenBen.json 瀵瑰簲鐨勮瘝缂€绫诲瀷骞跺鍑?TuJianChunWenBen銆?
@@ -105,3 +111,4 @@
 -   style(destop): 鍏ㄥ眬绂佺敤榛樿鍙抽敭鑿滃崟銆?
 -   style(destop): 鎻愬崌鑷畾涔夋粴鍔ㄦ潯鍙鎬э紙鍔犲ぇ婊戝潡灏哄銆佹彁楂樺姣斿害锛夈€?
 -   style(destop): 鏍瑰鍣ㄧ鐢ㄦ枃鏈€夋嫨锛屼粎琛ㄥ崟鍏冪礌锛坕nput/textarea/contenteditable锛夊厑璁搁€変腑銆?
+-   docs: 在 AGENTS.md 与 .codex/rules.md 中补充 Vitest 测试用例编写规则。

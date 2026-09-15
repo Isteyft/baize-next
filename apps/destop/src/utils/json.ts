@@ -295,8 +295,8 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
     return { id: createDatasetId(projectName), name: projectName, mods }
 }
 
-/** Meta 预加载分组的标签。 */
-const META_PRELOAD_LABEL = 'Meta 预加载'
+/** mod 预加载分组的标签。 */
+const MOD_PRELOAD_LABEL = 'mod 预加载'
 
 function preloadEntryName(entry: ProjectFileEntry): string {
     const fileName = entry.relativePath.split('/').pop() ?? entry.relativePath
@@ -326,7 +326,7 @@ export function parseModPreloadJsonEntry(entry: ProjectFileEntry): ProjectData {
     const mod: ProjectMod = {
         id: createDatasetId(name),
         name,
-        groups: [{ key: 'preload', label: META_PRELOAD_LABEL, records: dataset.records }],
+        groups: [{ key: 'preload', label: MOD_PRELOAD_LABEL, records: dataset.records }],
     }
     return { id: createDatasetId(`preload-${name}`), name, mods: [mod] }
 }

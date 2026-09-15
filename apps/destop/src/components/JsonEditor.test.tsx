@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { JsonEditor } from './JsonEditor'
@@ -27,13 +27,42 @@ describe('JsonEditor', () => {
         expect(screen.queryByDisplayValue('hidden-text')).toBeNull()
     })
 
-    it('commits complex json values on blur', () => {
+    it('commits object json values on blur', () => {
         const onUpdate = vi.fn()
-        render(<JsonEditor groupKey={null} record={{ key: 'a', data: { affixes: [1, 2] } }} onUpdate={onUpdate} />)
+        render(<JsonEditor groupKey={null} record={{ key: 'a', data: { config: { enabled: false } } }} onUpdate={onUpdate} />)
 
         const textarea = screen.getByRole('textbox')
-        fireEvent.change(textarea, { target: { value: '[3, 4]' } })
+        fireEvent.change(textarea, { target: { value: '{"enabled": true}' } })
         fireEvent.blur(textarea)
-        expect(onUpdate).toHaveBeenCalledWith('a', 'affixes', [3, 4])
+        expect(onUpdate).toHaveBeenCalledWith('a', 'config', { enabled: true })
+    })
+
+    it('edits array items in a table and commits changes', () => {
+        const onUpdate = vi.fn()
+        render(<JsonEditor groupKey={null} record={{ key: 'a', data: { numbers: [1, 2] } }} onUpdate={onUpdate} />)
+
+        const numberInputs = screen.getAllByRole('spinbutton')
+        expect(numberInputs).toHaveLength(2)
+        fireEvent.change(numberInputs[0]!, { target: { value: '10' } })
+        expect(onUpdate).toHaveBeenCalledWith('a', 'numbers', [10, 2])
+    })
+
+    it('adds and removes array items', () => {
+        const onUpdate = vi.fn()
+        render(<JsonEditor groupKey={null} record={{ key: 'a', data: { numbers: [1, 2] } }} onUpdate={onUpdate} />)
+
+        fireEvent.click(screen.getByRole('button', { name: '添加数组项' }))
+        expect(onUpdate).toHaveBeenCalledWith('a', 'numbers', [1, 2, 0])
+
+        fireEvent.click(screen.getByRole('button', { name: '移除第 1 项' }))
+        expect(onUpdate).toHaveBeenCalledWith('a', 'numbers', [2])
+    })
+
+    it('adds a default numeric item to an empty array', () => {
+        const onUpdate = vi.fn()
+        render(<JsonEditor groupKey={null} record={{ key: 'a', data: { numbers: [] } }} onUpdate={onUpdate} />)
+
+        fireEvent.click(screen.getByRole('button', { name: '添加数组项' }))
+        expect(onUpdate).toHaveBeenCalledWith('a', 'numbers', [0])
     })
 })

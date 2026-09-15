@@ -41,6 +41,7 @@ packages/
     -   ESLint 使用 `eslint.config.js`，启用 `simple-import-sort` 与 Prettier 规则
     -   Prettier 配置见 `.prettierrc`（单引号、无分号、printWidth 140）
     -   CSpell 拼写检查，自定义词表在 `.cspell/custom-words.txt`
+    -   测试：新增或修改关键逻辑（工具函数、数据解析、类型生成等）时必须配套编写并运行 Vitest 测试用例（`*.test.ts` / `*.test.tsx`），保证可回归验证
 -   Git 提交：
     -   使用 Conventional Commits，通过 commitlint + cz-git 约束
     -   type 枚举：`feat / fix / docs / style / refactor / perf / test / build / ci / chore / revert / wip / workflow / types / release`

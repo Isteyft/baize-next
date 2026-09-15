@@ -1,5 +1,4 @@
 ﻿import {
-    type JsonDataset,
     type JsonRecord,
     type JsonValue,
     PreloadSourceMode,
@@ -23,8 +22,6 @@ import { DEFAULT_META_PRELOAD_PATH, getSavedPreloadSettings, PRELOAD_MODE_OPTION
 import { subscribeTheme } from './theme'
 import {
     createDatasetId,
-    parseMetaEntriesFromEntries,
-    parseMetaJsonEntry,
     parseModPreloadFromEntries,
     parseModPreloadJsonEntry,
     parseProjectFromEntries,
@@ -37,7 +34,10 @@ const PRELOAD_FAILED_LABEL = '\u9884\u52a0\u8f7d\u5931\u8d25'
 const SAVED_TEXT = '\u5df2\u4fdd\u5b58'
 const SAVE_FAILED_TEXT = '\u4fdd\u5b58\u5931\u8d25'
 /** 当前表格与编辑器展示的数据来源。 */
-export type SelectionSource = { kind: 'meta'; datasetId: string } | { kind: 'project'; modId: string; groupKey: ProjectModGroupKey } | null
+export type SelectionSource =
+    | { kind: 'preload'; modId: string; groupKey: ProjectModGroupKey }
+    | { kind: 'project'; modId: string; groupKey: ProjectModGroupKey }
+    | null
 
 function mergeProjectData(base: ProjectData | null, next: ProjectData): ProjectData {
     if (!base) return next
@@ -53,7 +53,7 @@ function createEmptyMod(name: string): ProjectMod {
 }
 
 export default function App() {
-    const [metaDatasets, setMetaDatasets] = useState<JsonDataset[]>([])
+    const [preloadProject, setPreloadProject] = useState<ProjectData | null>(null)
     const [project, setProject] = useState<ProjectData | null>(null)
     const [selection, setSelection] = useState<SelectionSource>(null)
     const [selectedRecordKey, setSelectedRecordKey] = useState<string | null>(null)
@@ -66,18 +66,19 @@ export default function App() {
     const [dirty, setDirty] = useState(false)
     const [tip, setTip] = useState<{ message: string; tone: TipTone } | null>(null)
 
-    const selectedDataset =
-        selection?.kind === 'meta'
-            ? (metaDatasets.find(dataset => dataset.id === selection.datasetId) ?? null)
+    const selectedMod =
+        selection?.kind === 'preload'
+            ? (preloadProject?.mods.find(mod => mod.id === selection.modId) ?? null)
             : selection?.kind === 'project'
-              ? null
+              ? (project?.mods.find(mod => mod.id === selection.modId) ?? null)
               : null
-    const selectedMod = selection?.kind === 'project' ? (project?.mods.find(mod => mod.id === selection.modId) ?? null) : null
     const selectedGroup =
-        selectedMod?.groups.find(group => group.key === (selection?.kind === 'project' ? selection.groupKey : null)) ?? null
+        selectedMod?.groups.find(
+            group => group.key === (selection?.kind === 'preload' || selection?.kind === 'project' ? selection.groupKey : null)
+        ) ?? null
 
-    const records: JsonRecord[] = selectedDataset ? selectedDataset.records : (selectedGroup?.records ?? [])
-    const groupKey: ProjectModGroupKey | null = selection?.kind === 'project' ? selection.groupKey : null
+    const records: JsonRecord[] = selectedGroup?.records ?? []
+    const groupKey: ProjectModGroupKey | null = selection?.kind === 'preload' || selection?.kind === 'project' ? selection.groupKey : null
     const selectedRecord = records.find(record => record.key === selectedRecordKey) ?? null
 
     function recordError(source: string, error: unknown): void {
@@ -111,30 +112,20 @@ export default function App() {
         async function runBootPreload(): Promise<void> {
             await resetErrorLog()
             const preload = getSavedPreloadSettings()
-            const firstMeta = preload.meta[0]
-            if (firstMeta) {
-                setBootPath(firstMeta.path)
-                setBootMode(firstMeta.mode)
+            const firstPreload = preload.mods[0] ?? preload.meta[0]
+            if (firstPreload) {
+                setBootPath(firstPreload.path)
+                setBootMode(firstPreload.mode)
             }
             setBootPhase('loading')
             setBootError('')
             setSelection(null)
             setSelectedRecordKey(null)
 
-            const loadedMeta: JsonDataset[] = []
-            for (const entry of preload.meta) {
-                try {
-                    if (entry.mode === PreloadSourceMode.Json) {
-                        const fileEntry = await invoke<ProjectFileEntry>('read_json_file', { path: entry.path })
-                        loadedMeta.push(parseMetaJsonEntry(fileEntry))
-                    } else {
-                        const entries = await invoke<ProjectFileEntry[]>('read_project_files', { rootPath: entry.path })
-                        loadedMeta.push(...parseMetaEntriesFromEntries(entries))
-                    }
-                } catch (error) {
-                    recordError(`meta-preload ${entry.path}`, error)
-                }
-            }
+            setPreloadProject(null)
+            setProject(null)
+            setProjectRootPath(null)
+            setDirty(false)
 
             let mergedProject: ProjectData | null = null
             for (const entry of preload.mods) {
@@ -153,17 +144,11 @@ export default function App() {
             }
 
             if (cancelled) return
-            setMetaDatasets(loadedMeta)
-            setProject(mergedProject)
-            if (loadedMeta[0]) {
-                setSelection({ kind: 'meta', datasetId: loadedMeta[0].id })
-                setSelectedRecordKey(loadedMeta[0].records[0]?.key ?? null)
-            } else {
-                const firstMod = mergedProject?.mods[0] ?? null
-                const firstGroup = firstMod?.groups[0] ?? null
-                setSelection(firstMod && firstGroup ? { kind: 'project', modId: firstMod.id, groupKey: firstGroup.key } : null)
-                setSelectedRecordKey(firstGroup?.records[0]?.key ?? null)
-            }
+            setPreloadProject(mergedProject)
+            const firstMod = mergedProject?.mods[0] ?? null
+            const firstGroup = firstMod?.groups[0] ?? null
+            setSelection(firstMod && firstGroup ? { kind: 'preload', modId: firstMod.id, groupKey: firstGroup.key } : null)
+            setSelectedRecordKey(firstGroup?.records[0]?.key ?? null)
             setBootPhase('ready')
         }
 
@@ -196,16 +181,10 @@ export default function App() {
         }
     }
 
-    function handleSelectMeta(datasetId: string): void {
-        const dataset = metaDatasets.find(item => item.id === datasetId)
-        setSelection({ kind: 'meta', datasetId })
-        setSelectedRecordKey(dataset?.records[0]?.key ?? null)
-    }
-
-    function handleSelectGroup(modId: string, groupKey: ProjectModGroupKey): void {
-        const mod = project?.mods.find(item => item.id === modId)
+    function handleSelectGroup(kind: 'preload' | 'project', modId: string, groupKey: ProjectModGroupKey): void {
+        const mod = (kind === 'preload' ? preloadProject : project)?.mods.find(item => item.id === modId)
         const group = mod?.groups.find(item => item.key === groupKey)
-        setSelection({ kind: 'project', modId, groupKey })
+        setSelection({ kind, modId, groupKey })
         setSelectedRecordKey(group?.records[0]?.key ?? null)
     }
 
@@ -239,19 +218,33 @@ export default function App() {
     }
 
     function handleUpdateRecord(recordKey: string, field: string, value: JsonValue): void {
-        if (selection?.kind === 'meta') {
-            const datasetId = selection.datasetId
-            setMetaDatasets(prev =>
-                prev.map(dataset =>
-                    dataset.id === datasetId
-                        ? {
-                              ...dataset,
-                              records: dataset.records.map(record =>
-                                  record.key === recordKey ? { ...record, data: { ...record.data, [field]: value } } : record
-                              ),
-                          }
-                        : dataset
-                )
+        if (selection?.kind === 'preload') {
+            const { modId, groupKey } = selection
+            setPreloadProject(prev =>
+                prev
+                    ? {
+                          ...prev,
+                          mods: prev.mods.map(mod =>
+                              mod.id === modId
+                                  ? {
+                                        ...mod,
+                                        groups: mod.groups.map(group =>
+                                            group.key === groupKey
+                                                ? {
+                                                      ...group,
+                                                      records: group.records.map(record =>
+                                                          record.key === recordKey
+                                                              ? { ...record, data: { ...record.data, [field]: value } }
+                                                              : record
+                                                      ),
+                                                  }
+                                                : group
+                                        ),
+                                    }
+                                  : mod
+                          ),
+                      }
+                    : prev
             )
             return
         }
@@ -373,14 +366,14 @@ export default function App() {
             />
             <main className="flex min-h-0 flex-1">
                 <LeftPanel
-                    metaDatasets={metaDatasets}
+                    preloadProject={preloadProject}
                     project={project}
                     selection={selection}
                     onCreateMod={handleCreateMod}
                     onDeleteMod={handleDeleteMod}
                     onRenameMod={handleRenameMod}
-                    onSelectMeta={handleSelectMeta}
-                    onSelectGroup={handleSelectGroup}
+                    onSelectPreloadGroup={(modId, groupKey) => handleSelectGroup('preload', modId, groupKey)}
+                    onSelectGroup={(modId, groupKey) => handleSelectGroup('project', modId, groupKey)}
                 />
                 <DataTable groupKey={groupKey} records={records} selectedKey={selectedRecordKey} onSelect={setSelectedRecordKey} />
                 <JsonEditor groupKey={groupKey} record={selectedRecord} onUpdate={handleUpdateRecord} />

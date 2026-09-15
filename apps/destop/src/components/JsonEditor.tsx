@@ -21,6 +21,77 @@ const HIDDEN_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     tuJianChunWenBen: ['name1'],
 }
 
+function createArrayItemValue(values: JsonValue[]): JsonValue {
+    const first = values[0]
+    if (typeof first === 'string') return ''
+    if (typeof first === 'number') return 0
+    if (typeof first === 'boolean') return false
+    if (first === null) return null
+    if (typeof first === 'object') return JSON.parse(JSON.stringify(first)) as JsonValue
+    return 0
+}
+
+function JsonArrayInput({ value, onChange }: { value: JsonValue[]; onChange: (value: JsonValue[]) => void }) {
+    function handleAdd(): void {
+        onChange([...value, createArrayItemValue(value)])
+    }
+
+    function handleRemove(index: number): void {
+        onChange(value.filter((_, itemIndex) => itemIndex !== index))
+    }
+
+    function handleItemChange(index: number, next: JsonValue): void {
+        onChange(value.map((item, itemIndex) => (itemIndex === index ? next : item)))
+    }
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-end">
+                <button
+                    type="button"
+                    onClick={handleAdd}
+                    title="添加数组项"
+                    aria-label="添加数组项"
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover"
+                >
+                    +
+                </button>
+            </div>
+            {value.length === 0 ? (
+                <p className="text-xs text-ink-subtle">暂无数组项</p>
+            ) : (
+                <table className="w-full border-collapse text-left text-sm">
+                    <thead>
+                        <tr className="border-b border-line-strong text-ink-subtle">
+                            <th className="pb-1 pr-2 text-xs font-medium">值</th>
+                            <th className="w-14 pb-1 text-right text-xs font-medium">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {value.map((item, index) => (
+                            <tr key={index} className="border-b border-line">
+                                <td className="py-1.5 pr-2 align-top">
+                                    <JsonFieldInput value={item} onChange={next => handleItemChange(index, next)} />
+                                </td>
+                                <td className="w-14 py-1.5 text-right align-top">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemove(index)}
+                                        aria-label={`移除第 ${index + 1} 项`}
+                                        className="rounded-md px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-danger hover:text-white"
+                                    >
+                                        移除
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        </div>
+    )
+}
+
 function JsonComplexInput({ value, onCommit }: { value: JsonValue; onCommit: (value: JsonValue) => void }) {
     const [draft, setDraft] = useState(() => JSON.stringify(value, null, 2))
     const [error, setError] = useState<string | null>(null)
@@ -53,6 +124,9 @@ function JsonComplexInput({ value, onCommit }: { value: JsonValue; onCommit: (va
 }
 
 function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (value: JsonValue) => void }) {
+    if (Array.isArray(value)) {
+        return <JsonArrayInput value={value} onChange={onChange} />
+    }
     if (value === null) {
         return <input type="text" value="null" readOnly className={`${inputClass} opacity-60`} />
     }

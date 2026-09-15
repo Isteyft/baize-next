@@ -23,6 +23,7 @@
 -   使用 pnpm 安装/管理依赖；依赖变更需提交 `pnpm-lock.yaml`
 -   TypeScript：公共配置见 `tsconfig.json`，前端用 `tsconfig.client.json`，服务端用 `tsconfig.server.json`
 -   代码质量：遵循 ESLint（`eslint.config.js`）、Prettier（`.prettierrc`）、CSpell（`cspell.json`）
+-   测试：新增或修改关键逻辑时必须编写 Vitest 测试用例（`*.test.ts` / `*.test.tsx`），并保证测试可运行通过
 -   Git 提交：遵循 Conventional Commits，type 枚举见 `commitlint.config.cjs`；`pre-commit` 会执行 lint + spellcheck
 -   前后端代码中 `no-console` 为 error，禁止直接 `console.log`
 
