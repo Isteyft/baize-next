@@ -1,12 +1,18 @@
-import type { ThemeColor } from '@baize-next/types'
+import type { AppLanguage, ThemeColor } from '@baize-next/types'
 import { useEffect, useState } from 'react'
 
+import { getSavedLanguage, LANGUAGE_OPTIONS, setLanguage as persistLanguage, subscribeLanguage } from '../language'
 import { getSavedTheme, setTheme as persistTheme, subscribeTheme, THEME_OPTIONS } from '../theme'
 import { Select, type SelectOption } from './Select'
 import { WindowControls } from './WindowControls'
 
 /** 主题下拉框选项。 */
 const THEME_SELECT_OPTIONS: SelectOption<ThemeColor>[] = THEME_OPTIONS.map(option => ({
+    value: option.value,
+    label: option.label,
+}))
+
+const LANGUAGE_SELECT_OPTIONS: SelectOption<AppLanguage>[] = LANGUAGE_OPTIONS.map(option => ({
     value: option.value,
     label: option.label,
 }))
@@ -18,6 +24,7 @@ const THEME_SELECT_OPTIONS: SelectOption<ThemeColor>[] = THEME_OPTIONS.map(optio
  */
 export function SettingsWindow() {
     const [theme, setTheme] = useState<ThemeColor>(getSavedTheme)
+    const [language, setLanguage] = useState<AppLanguage>(getSavedLanguage)
 
     // 跨窗口同步主题：主窗口切换主题时，设置窗口实时跟随并保持选中态。
     useEffect(() => {
@@ -26,9 +33,17 @@ export function SettingsWindow() {
         })
     }, [])
 
+    // 跨窗口同步语言：主窗口切换语言时，设置窗口实时跟随并保持选中态。
+    useEffect(() => {
+        return subscribeLanguage(next => {
+            setLanguage(next)
+        })
+    }, [])
+
     /** 保存当前选择：应用、持久化并向主窗口广播。 */
     function handleSave(): void {
         persistTheme(theme)
+        persistLanguage(language)
     }
 
     return (
@@ -56,6 +71,12 @@ export function SettingsWindow() {
                     <h2 className="text-sm font-medium text-ink-muted">主题外观</h2>
                     <div className="max-w-xs">
                         <Select value={theme} options={THEME_SELECT_OPTIONS} onChange={setTheme} aria-label="主题外观" />
+                    </div>
+                </section>
+                <section className="space-y-2">
+                    <h2 className="text-sm font-medium text-ink-muted">界面语言</h2>
+                    <div className="max-w-xs">
+                        <Select value={language} options={LANGUAGE_SELECT_OPTIONS} onChange={setLanguage} aria-label="界面语言" />
                     </div>
                 </section>
             </main>

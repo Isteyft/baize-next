@@ -4,6 +4,18 @@
 
 ## [2026-09-15]
 
+-   feat(destop): 设置窗口新增“语言”下拉框，按主题模式持久化并跨窗口同步。
+-   feat(types): 新增 AppLanguage 枚举，并将 ProjectSettings.language 提供给设置存储。
+-   docs(i18n): 补充 en/zh-CN 语言设置相关文案。
+-   feat(destop): 文件 > 打开项目改为系统目录选择器，通过 Rust 命令递归读取项目 JSON 文件，不再使用文件上传控件。
+-   feat(destop): 右侧新增 JSON 编辑器，按字段显示 i18n 文案与类型对应输入框，支持字符串/数字/布尔/数组/对象编辑并实时回写表格。
+-   build(destop): 新增 @tauri-apps/plugin-dialog 与 tauri-plugin-dialog 依赖，注册 dialog 插件与 read_project_files 命令。
+-   fix(destop): 修复原生目录读取返回字段名与前端不一致导致的 JSON 解析崩溃，Rust 端序列化改为 camelCase。
+-   style(destop): JSON 编辑器仅显示字段的 i18n 语言名，移除字段下方的 key 展示。
+-   fix(i18n): 重新生成分组字段映射，补齐 qingjiaotype、Skill_LV 等遗漏字段的中文文案。
+-   feat(destop): 设置窗口新增界面语言选择并支持跨窗口同步。
+-   feat(types): 新增 AppLanguage 枚举与工程设置 language 字段。
+
 -   fix(destop): 修复主题在主窗口不生效的问题，主题切换通过 Tauri 事件跨窗口实时同步（含浏览器预览 storage 兜底）。
 -   feat(destop): 设置界面「主题外观」改为下拉框，封装通用 Select 组件，并在右上角新增保存按钮。
 -   fix(destop): 修复主窗口与设置窗口主题不同步——Tauri capabilities 补齐 settings 窗口权限（core:event 等），并让 storage 兜底也应用主题。
