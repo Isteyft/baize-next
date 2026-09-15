@@ -231,3 +231,72 @@ export async function parseProjectFromFiles(files: File[]): Promise<ProjectData>
 
     return { id: createDatasetId(projectName), name: projectName, mods }
 }
+
+/** 原生目录读取返回的项目 JSON 文件条目。 */
+export interface ProjectFileEntry {
+    /** 相对项目根目录的路径，统一使用 / 分隔。 */
+    relativePath: string
+    /** JSON 文件文本内容。 */
+    content: string
+}
+
+/** 从根路径名提取项目展示名称。 */
+export function projectNameFromPath(rootPath: string): string {
+    const normalized = rootPath.replace(/\\/g, '/').replace(/\/+$/, '')
+    const parts = normalized.split('/').filter(Boolean)
+    return parts[parts.length - 1] || '未命名项目'
+}
+
+/**
+ * 将 Tauri 原生目录选择得到的 JSON 文件条目解析为项目结构。
+ * 识别 plugins/Next 下的 modXXX，并按 BuffJsonData/ItemJsonData/skillJsonData 的目录结构合并数据。
+ */
+export async function parseProjectFromEntries(rootPath: string, entries: ProjectFileEntry[]): Promise<ProjectData> {
+    const projectName = projectNameFromPath(rootPath)
+    const grouped = new Map<string, Map<ProjectModGroupKey, ProjectFileEntry[]>>()
+
+    for (const entry of entries) {
+        const parts = entry.relativePath.split('/').filter(Boolean)
+        const match = matchProjectFile(parts)
+        if (!match) continue
+
+        const modMap = grouped.get(match.modName) ?? new Map<ProjectModGroupKey, ProjectFileEntry[]>()
+        const bucket = modMap.get(match.groupKey) ?? []
+        bucket.push(entry)
+        modMap.set(match.groupKey, bucket)
+        grouped.set(match.modName, modMap)
+    }
+
+    const mods: ProjectMod[] = []
+    for (const [modName, groupFiles] of grouped) {
+        const groups: ProjectModGroup[] = []
+
+        for (const def of PROJECT_GROUP_DEFS) {
+            const bucket = groupFiles.get(def.key) ?? []
+            const records: JsonRecord[] = []
+
+            if (def.key === 'config' || def.key === 'skill' || def.key === 'npcType' || def.key === 'npcWuDao') {
+                for (const entry of bucket) {
+                    const fileName = entry.relativePath.split('/').pop() ?? 'root'
+                    const dataset = parseJsonContent(fileName.replace(/\.json$/i, ''), entry.content)
+                    records.push(...dataset.records)
+                }
+            } else {
+                for (const entry of bucket) {
+                    const fileName = entry.relativePath.split('/').pop() ?? 'root'
+                    const parsed: unknown = JSON.parse(entry.content)
+                    if (!isRecordObject(parsed)) {
+                        throw new Error(`文件 ${fileName} 不是对象，无法作为记录`)
+                    }
+                    records.push({ key: resolveRecordKey(parsed, fileName.replace(/\.json$/i, '')), data: parsed })
+                }
+            }
+
+            groups.push({ key: def.key, label: def.label, records })
+        }
+
+        mods.push({ id: createDatasetId(modName), name: modName, groups })
+    }
+
+    return { id: createDatasetId(projectName), name: projectName, mods }
+}

@@ -151,11 +151,16 @@
     "Settings": "Settings"
   },
   "ProjectSettings": {
-    "theme": "theme"
+    "theme": "theme",
+    "language": "Language"
   },
   "ThemeColor": {
     "Light": "Light",
     "Dark": "Dark",
     "CyanBlack": "CyanBlack"
+  },
+  "AppLanguage": {
+    "ZhCN": "Chinese (Simplified)",
+    "En": "English"
   }
 }
