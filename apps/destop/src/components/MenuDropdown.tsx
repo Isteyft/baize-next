@@ -32,13 +32,13 @@ export function MenuDropdown({ label, children }: MenuDropdownProps) {
             <button
                 type="button"
                 onClick={() => setOpen(value => !value)}
-                className="h-full px-3 text-sm text-gray-200 transition-colors hover:bg-gray-700 focus:outline-none"
+                className="h-full px-3 text-sm text-ink-soft transition-colors hover:bg-hover focus:outline-none"
             >
                 {label}
             </button>
             {open && (
                 <div
-                    className="absolute left-0 top-full z-50 min-w-40 rounded-md border border-gray-700 bg-gray-800 py-1 shadow-lg"
+                    className="absolute left-0 top-full z-50 min-w-40 rounded-md border border-line-strong bg-raised py-1 shadow-lg"
                     onClick={() => setOpen(false)}
                 >
                     {children}

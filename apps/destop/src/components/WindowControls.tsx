@@ -1,4 +1,4 @@
-﻿import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useState } from 'react'
 
 /**
@@ -61,7 +61,7 @@ export function WindowControls() {
                 type="button"
                 title="最小化"
                 onClick={handleMinimize}
-                className="w-11 text-gray-300 transition-colors hover:bg-gray-700 focus:outline-none"
+                className="flex w-11 items-center justify-center text-ink-muted transition-colors hover:bg-hover focus:outline-none"
             >
                 <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="currentColor">
                     <rect x="0" y="5" width="12" height="1" />
@@ -71,7 +71,7 @@ export function WindowControls() {
                 type="button"
                 title={isMaximized ? '还原' : '最大化'}
                 onClick={handleMaximize}
-                className="w-11 text-gray-300 transition-colors hover:bg-gray-700 focus:outline-none"
+                className="flex w-11 items-center justify-center text-ink-muted transition-colors hover:bg-hover focus:outline-none"
             >
                 {isMaximized ? (
                     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
@@ -88,7 +88,7 @@ export function WindowControls() {
                 type="button"
                 title="关闭"
                 onClick={handleClose}
-                className="w-11 text-gray-300 transition-colors hover:bg-red-600 hover:text-white focus:outline-none"
+                className="flex w-11 items-center justify-center text-ink-muted transition-colors hover:bg-danger hover:text-white focus:outline-none"
             >
                 <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
                     <path d="M2 2l8 8M10 2l-8 8" />

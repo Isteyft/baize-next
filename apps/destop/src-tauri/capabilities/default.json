@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主窗口默认权限：允许窗口控制与拖拽区域。",
-  "windows": ["main"],
+  "description": "主/设置窗口默认权限：允许窗口控制、拖拽区域与跨窗口事件通信。",
+  "windows": ["main", "settings"],
   "permissions": [
     "core:default",
+    "core:event:default",
     "core:window:allow-minimize",
     "core:window:allow-maximize",
     "core:window:allow-unmaximize",
@@ -12,6 +13,7 @@
     "core:window:allow-close",
     "core:window:allow-is-maximized",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-focus",
     "core:webview:allow-create-webview-window"
   ]
 }

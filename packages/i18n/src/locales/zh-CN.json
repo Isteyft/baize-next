@@ -149,5 +149,13 @@
     "Version": "版本",
     "Description": "介绍",
     "Settings": "设置"
+  },
+  "ProjectSettings": {
+    "theme": "主题色"
+  },
+  "ThemeColor": {
+    "Light": "亮色",
+    "Dark": "暗色",
+    "CyanBlack": "青黑色"
   }
 }

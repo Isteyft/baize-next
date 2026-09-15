@@ -27,19 +27,19 @@ export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTabl
 
     return (
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 border-b border-gray-800 bg-gray-900 px-3 py-2">
-                <h2 className="text-sm font-medium text-gray-300">数据表格</h2>
+            <div className="shrink-0 border-b border-line bg-panel px-3 py-2">
+                <h2 className="text-sm font-medium text-ink-muted">数据表格</h2>
             </div>
-            <ScrollArea className="flex-1 bg-gray-900" viewportClassName="h-full">
+            <ScrollArea className="flex-1 bg-panel" viewportClassName="h-full">
                 {records.length === 0 ? (
-                    <p className="p-4 text-sm text-gray-500">当前分组没有记录</p>
+                    <p className="p-4 text-sm text-ink-subtle">当前分组没有记录</p>
                 ) : (
                     <table className="w-full min-w-max border-collapse text-left text-sm">
-                        <thead className="sticky top-0 bg-gray-800 text-gray-400">
+                        <thead className="sticky top-0 bg-raised text-ink-muted">
                             <tr>
-                                <th className="whitespace-nowrap border-b border-gray-700 px-4 py-2.5">ID</th>
+                                <th className="whitespace-nowrap border-b border-line-strong px-4 py-2.5">ID</th>
                                 {fields.map(field => (
-                                    <th key={field} className="whitespace-nowrap border-b border-gray-700 px-4 py-2.5">
+                                    <th key={field} className="whitespace-nowrap border-b border-line-strong px-4 py-2.5">
                                         {groupKey ? translateField(groupKey, field) : field}
                                     </th>
                                 ))}
@@ -50,15 +50,15 @@ export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTabl
                                 <tr
                                     key={record.key}
                                     onClick={() => onSelect(record.key)}
-                                    className={`cursor-pointer border-b border-gray-800 transition-colors ${
-                                        record.key === selectedKey ? 'bg-blue-900/50 text-white' : 'text-gray-300 hover:bg-gray-800'
+                                    className={`cursor-pointer border-b border-line transition-colors ${
+                                        record.key === selectedKey ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-raised'
                                     }`}
                                 >
                                     <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs">{record.key}</td>
                                     {fields.map(field => (
                                         <td key={field} className="max-w-72 truncate px-4 py-2.5">
                                             {record.data[field] === undefined ? (
-                                                <span className="text-gray-600">—</span>
+                                                <span className="text-ink-subtle">—</span>
                                             ) : (
                                                 formatCellValue(record.data[field])
                                             )}

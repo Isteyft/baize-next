@@ -14,9 +14,9 @@ interface ScrollAreaProps {
     viewportClassName?: string
 }
 
-const TRACK_CLASS = 'shrink-0 border-gray-700 transition-colors'
+const TRACK_CLASS = 'shrink-0 border-line-strong transition-colors'
 const HANDLE_CLASS =
-    'will-change-transform rounded-full bg-blue-500 shadow-md ring-1 ring-blue-300/40 transition-colors hover:bg-blue-400 active:bg-blue-300 cursor-pointer'
+    'will-change-transform rounded-full bg-accent shadow-md ring-1 ring-accent-ring transition-colors hover:bg-accent-hover active:bg-accent-active cursor-pointer'
 
 interface ThumbGeometry {
     vSize: number
@@ -176,7 +176,7 @@ export function ScrollArea({ children, className = '', viewportClassName = '' }:
                 </div>
                 <div
                     ref={hTrackRef}
-                    className={`${TRACK_CLASS} flex h-2.5 items-center border-t px-1 ${thumbs.hScrollable ? 'bg-gray-800/80' : 'bg-gray-900/40'}`}
+                    className={`${TRACK_CLASS} flex h-2.5 items-center border-t px-1 ${thumbs.hScrollable ? 'bg-raised' : 'bg-panel'}`}
                 >
                     <div
                         ref={hThumbRef}
@@ -189,7 +189,7 @@ export function ScrollArea({ children, className = '', viewportClassName = '' }:
             {/* 纵向轨道 */}
             <div
                 ref={vTrackRef}
-                className={`${TRACK_CLASS} flex w-2.5 flex-col items-center border-l py-1 ${thumbs.vScrollable ? 'bg-gray-800/80' : 'bg-gray-900/40'}`}
+                className={`${TRACK_CLASS} flex w-2.5 flex-col items-center border-l py-1 ${thumbs.vScrollable ? 'bg-raised' : 'bg-panel'}`}
             >
                 <div
                     ref={vThumbRef}

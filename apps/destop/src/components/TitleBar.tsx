@@ -16,14 +16,14 @@ export function TitleBar({ onOpenProject, onOpenSettings }: TitleBarProps) {
     return (
         <header
             data-tauri-drag-region="true"
-            className="flex h-10 shrink-0 select-none items-center justify-between bg-gray-900 text-gray-200"
+            className="flex h-10 shrink-0 select-none items-center justify-between bg-panel text-ink-soft"
         >
             <nav className="flex h-full items-center">
                 <MenuDropdown label="文件">
                     <button
                         type="button"
                         onClick={onOpenProject}
-                        className="block w-full px-3 py-1.5 text-left text-sm text-gray-200 hover:bg-gray-700"
+                        className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover"
                     >
                         打开项目
                     </button>
@@ -32,12 +32,12 @@ export function TitleBar({ onOpenProject, onOpenSettings }: TitleBarProps) {
                     <button
                         type="button"
                         onClick={onOpenSettings}
-                        className="block w-full px-3 py-1.5 text-left text-sm text-gray-200 hover:bg-gray-700"
+                        className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover"
                     >
                         设置
                     </button>
                 </MenuDropdown>
-                <span className="ml-2 text-xs text-gray-500">Baize Next Destop</span>
+                <span className="ml-2 text-xs text-ink-subtle">Baize Next Destop</span>
             </nav>
             <WindowControls />
         </header>

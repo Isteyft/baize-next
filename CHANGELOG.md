@@ -2,8 +2,20 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+## [2026-09-15]
+
+-   fix(destop): 修复主题在主窗口不生效的问题，主题切换通过 Tauri 事件跨窗口实时同步（含浏览器预览 storage 兜底）。
+-   feat(destop): 设置界面「主题外观」改为下拉框，封装通用 Select 组件，并在右上角新增保存按钮。
+-   fix(destop): 修复主窗口与设置窗口主题不同步——Tauri capabilities 补齐 settings 窗口权限（core:event 等），并让 storage 兜底也应用主题。
+-   style(destop): 修复窗口控制按钮（最小化/最大化/关闭）图标未居中的问题，改用 flex 居中布局。
+-   feat(destop): 为设置子窗口增加自定义拖拽栏与最小化/最大化/关闭按钮（应用 decorations:false，复用 WindowControls）。
+-   style(destop): 调整设置窗口「保存」按钮位置，固定于顶部右上角，与窗口控制按钮并排。
+-   refactor(destop): 删除主界面标题栏「视图」主题切换菜单，主题统一由设置窗口管理，并清理对应 prop/状态。
+
 ## [2026-09-14]
 
+-   style(destop): 桌面端引入「青黑色」主题 Token 系统，以语义色类替换全部灰色阶与蓝色强调（accent/ink/panel/raised/base 等）。
+-   feat(destop): 主题系统扩展为三款（青黑色/暗色黑/亮色白），新增 data-theme Token、持久化与标题栏/设置页切换。
 -   feat(destop): 设置界面改为独立窗口，由“关于 > 设置”打开，窗口内容暂为 TODO。
 
 ## [2026-09-13]
@@ -41,7 +53,8 @@
 -   docs(i18n): 补充 ItemJsonData 字段的中文文案（包含字段说明映射）。
 -   docs(i18n): 补充 SkillJsonData 与 StaticSkillJsonData 字段的中文文案（包含字段说明映射）。
 -   docs(i18n): 补充 NPCLeiXingDate 与 NPCWuDaoJson 字段的中文文案（包含字段说明映射）。
--   feat(types): 新增 ModConfig 类型与 i18n 文案，覆盖 mod 名称/作者/版本/介绍/设置及设置选项。，新增 en/zh-CN 文案映射，英文暂用字段名作为展示文案，中文复制英文待补充。
+-   feat(types): 新增 ModConfig 类型与 i18n 文案，覆盖 mod 名称/作者/版本/介绍/设置及设置选项。
+-   feat(types): 新增项目设置专用类型 ProjectSettings 与主题色枚举 ThemeColor（亮色/暗色/青黑色），并补充 i18n 文案。，新增 en/zh-CN 文案映射，英文暂用字段名作为展示文案，中文复制英文待补充。
 -   docs: 在 AGENTS.md 与 .codex/rules.md 中补充 monorepo 架构规则，供子智能体识别仓库边界。
 -   docs: 修正 monorepo 架构规则中代码标记格式（`apps/*`、`packages/*`）。
 -   feat(destop): 打开项目目录（plugins/Next/_/mod_），解析项目结构并展示 mod 树。

@@ -6,6 +6,7 @@ import { DataTable } from './components/DataTable'
 import { LeftPanel } from './components/LeftPanel'
 import { RightTodo } from './components/RightTodo'
 import { TitleBar } from './components/TitleBar'
+import { subscribeTheme } from './theme'
 import { parseProjectFromFiles } from './utils/json'
 
 /**
@@ -26,6 +27,11 @@ export default function App() {
     // 项目根目录选择控件需要 webkitdirectory 支持整目录读取。
     useEffect(() => {
         projectInputRef.current?.setAttribute('webkitdirectory', '')
+    }, [])
+
+    // 跨窗口同步主题：主题应用由 theme.ts 内部完成，这里仅注册订阅，使主窗口实时跟随。
+    useEffect(() => {
+        return subscribeTheme(() => undefined)
     }, [])
 
     /** 让“文件 > 打开项目”触发项目目录选择。 */
@@ -75,6 +81,7 @@ export default function App() {
                 minWidth: 420,
                 minHeight: 320,
                 center: true,
+                decorations: false,
             })
         } catch {
             // 非 Tauri 环境（如浏览器预览）时忽略，避免点击设置按钮崩溃。
@@ -82,7 +89,7 @@ export default function App() {
     }
 
     return (
-        <div className="flex h-full select-none flex-col bg-gray-950 text-gray-100" onContextMenu={event => event.preventDefault()}>
+        <div className="flex h-full select-none flex-col bg-base text-ink" onContextMenu={event => event.preventDefault()}>
             <TitleBar onOpenProject={handleOpenProject} onOpenSettings={() => void handleOpenSettings()} />
             <main className="flex min-h-0 flex-1">
                 <LeftPanel

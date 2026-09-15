@@ -149,5 +149,13 @@
     "Version": "Version",
     "Description": "Description",
     "Settings": "Settings"
+  },
+  "ProjectSettings": {
+    "theme": "theme"
+  },
+  "ThemeColor": {
+    "Light": "Light",
+    "Dark": "Dark",
+    "CyanBlack": "CyanBlack"
   }
 }
