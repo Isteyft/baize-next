@@ -7,11 +7,11 @@ export interface BuffJsonDataItem {
     Affix: number[]
     BuffIcon: number
     BuffType: number
-    ShowOnlyOne: number
+    ShowOnlyOne: 0 | 1
     buffid: number
     bufftype: number
     descr: string
-    isHide: number
+    isHide: 0 | 1
     looptime: number
     name: string
     removeTrigger: number

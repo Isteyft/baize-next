@@ -1,10 +1,14 @@
-﻿import { type JsonRecord } from '@baize-next/types'
+import { type JsonRecord } from '@baize-next/types'
 import { describe, expect, it } from 'vitest'
 
 import {
+    collectGroupRecords,
     collectRecordFields,
     createDatasetId,
     formatCellValue,
+    getAffixProjectTypeOptions,
+    getAffixSelectOptions,
+    getAffixTypeOptions,
     isRecordMap,
     isRecordObject,
     parseJsonContent,
@@ -133,6 +137,46 @@ describe('project JSON mapping', () => {
         expect(dataset.records[0]?.key).toBe('one')
     })
 
+    it('builds affix meta enum options from preloaded datasets', () => {
+        const datasets = [
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/AffixProjectType.json',
+                content: '[{"TypeName":"AffixProject","TypeNum":101}]',
+            }),
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/AffixType.json',
+                content: '[{"TypeID":1,"TypeName":"Buff"}]',
+            }),
+        ]
+
+        expect(getAffixProjectTypeOptions(datasets)).toEqual([
+            { value: '101', label: 'AffixProject', typeNum: 101, typeName: 'AffixProject' },
+        ])
+        expect(getAffixTypeOptions(datasets)).toEqual([{ value: '1', label: 'Buff', typeId: 1, typeName: 'Buff' }])
+    })
+
+    it('builds affix selection options from loaded TuJianChunWenBen records', () => {
+        const records: JsonRecord[] = [
+            { key: '270000', data: { id: 270000, name1: 'project', typenum: 101, type: 1, name2: 'Affix A', descr: 'desc' } },
+            { key: '270001', data: { id: 270001, name1: 'project', typenum: 101, type: 1, name2: 'Affix B' } },
+            { key: 'dup', data: { id: 270000, name1: 'dup', typenum: 0, type: 0, name2: 'Dup' } },
+            { key: 'no-id', data: { name2: 'No id' } },
+        ]
+
+        expect(getAffixSelectOptions(records)).toEqual([
+            expect.objectContaining({ id: 270000, label: 'Affix A', typenum: 101, type: 1, descr: 'desc' }),
+            expect.objectContaining({ id: 270001, label: 'Affix B', typenum: 101, type: 1, descr: '' }),
+        ])
+    })
+
+    it('collects tuJianChunWenBen records from loaded projects', () => {
+        const project = parseModPreloadJsonEntry({
+            relativePath: 'preload.json',
+            content: '[{"id":1,"name2":"Affix A"}]',
+        })
+
+        expect(collectGroupRecords(project, 'preload')).toHaveLength(1)
+    })
     it('labels mod preload json groups as mod preload', () => {
         const project = parseModPreloadJsonEntry({
             relativePath: 'preload.json',

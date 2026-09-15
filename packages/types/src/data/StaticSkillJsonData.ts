@@ -6,7 +6,7 @@
 export interface StaticSkillJsonDataItem {
     Affix: number[]
     AttackType: number
-    DF: number
+    DF: 0 | 1
     Skill_ID: number
     Skill_LV: number
     Skill_Lv: number

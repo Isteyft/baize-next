@@ -3,11 +3,13 @@
  * 请勿手动修改，若 JSON 数据变更，应重新解析更新。
  */
 
+import type { AffixProjectTypeItem, AffixTypeItem } from './meta'
+
 export interface TuJianChunWenBenItem {
     id: number
-    name1: string
-    typenum: number
-    type: number
+    name1: AffixProjectTypeItem['TypeName']
+    typenum: AffixProjectTypeItem['TypeNum']
+    type: AffixTypeItem['TypeID']
     name2: string
     descr: string
 }

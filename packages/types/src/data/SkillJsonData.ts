@@ -8,7 +8,7 @@ export interface SkillJsonDataItem {
     Affix2: number[]
     AttackType: number[]
     CD: number
-    DF: number
+    DF: 0 | 1
     HP: number
     Skill_DisplayType: number
     Skill_ID: number

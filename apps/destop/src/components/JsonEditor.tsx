@@ -1,14 +1,19 @@
 import { translateField } from '@baize-next/i18n'
-import type { JsonRecord, JsonValue, ProjectModGroupKey } from '@baize-next/types'
+import type { JsonDataset, JsonRecord, JsonValue, ProjectModGroupKey } from '@baize-next/types'
 import { useState } from 'react'
 
+import { getAffixProjectTypeOptions, getAffixSelectOptions, getAffixTypeOptions } from '../utils/json'
+import { AffixSelect } from './AffixSelect'
 import { ScrollArea } from './ScrollArea'
+import { Select, type SelectOption } from './Select'
 
 interface JsonEditorProps {
     /** 当前分组 key，用于字段 i18n 映射。 */
     groupKey: ProjectModGroupKey | null
     /** 当前选中记录，未选中时为 null。 */
     record: JsonRecord | null
+    metaDatasets?: JsonDataset[]
+    affixRecords?: JsonRecord[]
     /** 字段变更回调，实时回写表格。 */
     onUpdate: (recordKey: string, field: string, value: JsonValue) => void
 }
@@ -17,6 +22,14 @@ const inputClass =
     'w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-ink transition-colors placeholder:text-ink-subtle focus:border-accent focus:outline-none'
 
 /** 暂不展示的词缀填写字段。 */
+const AFFIX_FIELDS = new Set(['Affix', 'Affix2'])
+
+const BOOL_NUMBER_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
+    buff: ['isHide', 'ShowOnlyOne'],
+    skill: ['DF'],
+    shenTong: ['DF'],
+}
+
 const HIDDEN_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     tuJianChunWenBen: ['name1'],
 }
@@ -166,7 +179,35 @@ function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (valu
     return <JsonComplexInput value={value} onCommit={onChange} />
 }
 
-export function JsonEditor({ groupKey, record, onUpdate }: JsonEditorProps) {
+interface JsonEnumInputProps {
+    value: JsonValue
+    options: SelectOption<string>[]
+    label: string
+    onSelect: (value: string) => void
+}
+
+function JsonEnumInput({ value, options, label, onSelect }: JsonEnumInputProps) {
+    const current = typeof value === 'string' || typeof value === 'number' ? String(value) : ''
+    return <Select value={current} options={options} onChange={onSelect} aria-label={label} className="w-full" />
+}
+
+function JsonFlagInput({ value, label, onChange }: { value: JsonValue; label: string; onChange: (value: JsonValue) => void }) {
+    const checked = value === 1
+    return (
+        <label className="flex h-9 items-center gap-2 rounded-md border border-line bg-panel px-2.5 text-sm text-ink">
+            <input
+                type="checkbox"
+                aria-label={label}
+                checked={checked}
+                onChange={event => onChange(event.target.checked ? 1 : 0)}
+                className="h-4 w-4 accent-accent"
+            />
+            <span>{checked ? '是' : '否'}</span>
+        </label>
+    )
+}
+
+export function JsonEditor({ groupKey, record, metaDatasets = [], affixRecords = [], onUpdate }: JsonEditorProps) {
     const hiddenFields = groupKey ? (HIDDEN_FIELDS[groupKey] ?? []) : []
     const fields = record ? Object.keys(record.data).filter(field => !hiddenFields.includes(field)) : []
 
@@ -181,16 +222,82 @@ export function JsonEditor({ groupKey, record, onUpdate }: JsonEditorProps) {
                         {fields.map(field => {
                             const label = groupKey ? translateField(groupKey, field) : field
                             const value = record.data[field]
+                            const isAffixField =
+                                groupKey !== null &&
+                                (groupKey === 'buff' || groupKey === 'item' || groupKey === 'skill' || groupKey === 'shenTong') &&
+                                AFFIX_FIELDS.has(field)
+                            const isFlagField = groupKey !== null && (BOOL_NUMBER_FIELDS[groupKey] ?? []).includes(field)
+                            let control = (
+                                <JsonFieldInput
+                                    key={`${record.key}-${field}`}
+                                    value={value}
+                                    onChange={next => onUpdate(record.key, field, next)}
+                                />
+                            )
+                            if (isAffixField && Array.isArray(value)) {
+                                const options = getAffixSelectOptions(affixRecords)
+                                control = (
+                                    <AffixSelect
+                                        key={`${record.key}-${field}`}
+                                        value={value}
+                                        options={options}
+                                        label={label}
+                                        onCommit={next => onUpdate(record.key, field, next)}
+                                    />
+                                )
+                            } else if (isFlagField) {
+                                control = (
+                                    <JsonFlagInput
+                                        key={`${record.key}-${field}`}
+                                        value={value}
+                                        label={label}
+                                        onChange={next => onUpdate(record.key, field, next)}
+                                    />
+                                )
+                            } else if (groupKey === 'tuJianChunWenBen' && field === 'typenum') {
+                                const options = getAffixProjectTypeOptions(metaDatasets)
+                                if (options.length > 0) {
+                                    control = (
+                                        <JsonEnumInput
+                                            key={`${record.key}-${field}`}
+                                            value={value}
+                                            options={options}
+                                            label={label}
+                                            onSelect={next => {
+                                                const option = options.find(item => item.value === next)
+                                                if (option) {
+                                                    onUpdate(record.key, 'typenum', option.typeNum)
+                                                    onUpdate(record.key, 'name1', option.typeName)
+                                                }
+                                            }}
+                                        />
+                                    )
+                                }
+                            } else if (groupKey === 'tuJianChunWenBen' && field === 'type') {
+                                const options = getAffixTypeOptions(metaDatasets)
+                                if (options.length > 0) {
+                                    control = (
+                                        <JsonEnumInput
+                                            key={`${record.key}-${field}`}
+                                            value={value}
+                                            options={options}
+                                            label={label}
+                                            onSelect={next => {
+                                                const option = options.find(item => item.value === next)
+                                                if (option) {
+                                                    onUpdate(record.key, 'type', option.typeId)
+                                                }
+                                            }}
+                                        />
+                                    )
+                                }
+                            }
                             return (
                                 <div key={field}>
                                     <div className="mb-1.5">
                                         <span className="block text-sm font-medium text-ink-soft">{label}</span>
                                     </div>
-                                    <JsonFieldInput
-                                        key={`${record.key}-${field}`}
-                                        value={value}
-                                        onChange={next => onUpdate(record.key, field, next)}
-                                    />
+                                    {control}
                                 </div>
                             )
                         })}

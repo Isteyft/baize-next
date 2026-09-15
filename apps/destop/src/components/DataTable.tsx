@@ -36,6 +36,30 @@ const HIDDEN_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     tuJianChunWenBen: ['name1'],
 }
 
+function recordSortValue(record: JsonRecord, primaryField: string | null): string {
+    const value = primaryField ? record.data[primaryField] : undefined
+    if (typeof value === 'number' || typeof value === 'string') return String(value)
+    return record.key
+}
+
+function numericSortValue(value: string): number | null {
+    const trimmed = value.trim()
+    if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function compareRecords(a: JsonRecord, b: JsonRecord, primaryField: string | null): number {
+    const aValue = recordSortValue(a, primaryField)
+    const bValue = recordSortValue(b, primaryField)
+    const aNumber = numericSortValue(aValue)
+    const bNumber = numericSortValue(bValue)
+    if (aNumber !== null && bNumber !== null) return aNumber - bNumber
+    if (aNumber !== null) return -1
+    if (bNumber !== null) return 1
+    return aValue.localeCompare(bValue)
+}
+
 export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTableProps) {
     const allFields = collectRecordFields(records)
     // 主键列按分组类型显示；分组不存在主键字段时不生成伪 ID。
@@ -43,6 +67,7 @@ export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTabl
     const hasPrimaryField = primaryField !== null && records.some(record => record.data[primaryField] !== undefined)
     const hiddenFields = groupKey ? (HIDDEN_FIELDS[groupKey] ?? []) : []
     const fields = allFields.filter(field => field !== 'key' && field !== primaryField && !hiddenFields.includes(field))
+    const sortedRecords = [...records].sort((a, b) => compareRecords(a, b, primaryField))
 
     return (
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -50,7 +75,7 @@ export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTabl
                 <h2 className="text-sm font-medium text-ink-muted">数据表格</h2>
             </div>
             <ScrollArea className="flex-1 bg-panel" viewportClassName="h-full">
-                {records.length === 0 ? (
+                {sortedRecords.length === 0 ? (
                     <p className="p-4 text-sm text-ink-subtle">当前分组没有记录</p>
                 ) : (
                     <table className="w-full min-w-max border-collapse text-left text-sm">
@@ -69,7 +94,7 @@ export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTabl
                             </tr>
                         </thead>
                         <tbody>
-                            {records.map(record => (
+                            {sortedRecords.map(record => (
                                 <tr
                                     key={record.key}
                                     onClick={() => onSelect(record.key)}

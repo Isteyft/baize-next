@@ -184,6 +184,84 @@ export function formatCellValue(value: JsonValue): string {
     return String(value)
 }
 
+export interface AffixProjectTypeOption {
+    value: string
+    label: string
+    typeNum: number
+    typeName: string
+}
+
+export interface AffixTypeOption {
+    value: string
+    label: string
+    typeId: number
+    typeName: string
+}
+
+export function getAffixProjectTypeOptions(datasets: JsonDataset[]): AffixProjectTypeOption[] {
+    const dataset = datasets.find(item => item.name === 'AffixProjectType')
+    const options: AffixProjectTypeOption[] = []
+    for (const record of dataset?.records ?? []) {
+        const typeNum = record.data.TypeNum
+        const typeName = record.data.TypeName
+        if (typeof typeNum === 'number' && typeof typeName === 'string') {
+            options.push({ value: String(typeNum), label: typeName, typeNum, typeName })
+        }
+    }
+    return options
+}
+
+export function getAffixTypeOptions(datasets: JsonDataset[]): AffixTypeOption[] {
+    const dataset = datasets.find(item => item.name === 'AffixType')
+    const options: AffixTypeOption[] = []
+    for (const record of dataset?.records ?? []) {
+        const typeId = record.data.TypeID
+        const typeName = record.data.TypeName
+        if (typeof typeId === 'number' && typeof typeName === 'string') {
+            options.push({ value: String(typeId), label: typeName, typeId, typeName })
+        }
+    }
+    return options
+}
+
+export interface AffixSelectOption {
+    id: number
+    value: string
+    label: string
+    name1: string
+    typenum: number
+    type: number
+    descr: string
+}
+
+export function getAffixSelectOptions(records: JsonRecord[]): AffixSelectOption[] {
+    const options: AffixSelectOption[] = []
+    const seen = new Set<number>()
+    for (const record of records) {
+        const id = record.data.id
+        if (typeof id !== 'number' || seen.has(id)) continue
+        seen.add(id)
+        const name1 = typeof record.data.name1 === 'string' ? record.data.name1 : ''
+        const name2 = typeof record.data.name2 === 'string' ? record.data.name2 : ''
+        const typenum = typeof record.data.typenum === 'number' ? record.data.typenum : 0
+        const type = typeof record.data.type === 'number' ? record.data.type : 0
+        const descr = typeof record.data.descr === 'string' ? record.data.descr : ''
+        options.push({
+            id,
+            value: String(id),
+            label: name2 || String(id),
+            name1,
+            typenum,
+            type,
+            descr,
+        })
+    }
+    return options
+}
+
+export function collectGroupRecords(project: ProjectData | null, groupKey: ProjectModGroupKey): JsonRecord[] {
+    return project?.mods.flatMap(mod => mod.groups.find(group => group.key === groupKey)?.records ?? []) ?? []
+}
 /** 路径片段归类结果。 */
 interface ProjectFileMatch {
     /** mod 文件夹名，例如 modXXX。 */

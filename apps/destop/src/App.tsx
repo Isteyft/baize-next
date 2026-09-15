@@ -1,4 +1,5 @@
 ﻿import {
+    type JsonDataset,
     type JsonRecord,
     type JsonValue,
     PreloadSourceMode,
@@ -21,7 +22,9 @@ import { appendErrorLog, resetErrorLog } from './errorLog'
 import { DEFAULT_META_PRELOAD_PATH, getSavedPreloadSettings, PRELOAD_MODE_OPTIONS } from './preload'
 import { subscribeTheme } from './theme'
 import {
+    collectGroupRecords,
     createDatasetId,
+    parseMetaEntriesFromEntries,
     parseModPreloadFromEntries,
     parseModPreloadJsonEntry,
     parseProjectFromEntries,
@@ -54,6 +57,7 @@ function createEmptyMod(name: string): ProjectMod {
 
 export default function App() {
     const [preloadProject, setPreloadProject] = useState<ProjectData | null>(null)
+    const [metaDatasets, setMetaDatasets] = useState<JsonDataset[]>([])
     const [project, setProject] = useState<ProjectData | null>(null)
     const [selection, setSelection] = useState<SelectionSource>(null)
     const [selectedRecordKey, setSelectedRecordKey] = useState<string | null>(null)
@@ -80,6 +84,7 @@ export default function App() {
     const records: JsonRecord[] = selectedGroup?.records ?? []
     const groupKey: ProjectModGroupKey | null = selection?.kind === 'preload' || selection?.kind === 'project' ? selection.groupKey : null
     const selectedRecord = records.find(record => record.key === selectedRecordKey) ?? null
+    const affixRecords = [...collectGroupRecords(preloadProject, 'tuJianChunWenBen'), ...collectGroupRecords(project, 'tuJianChunWenBen')]
 
     function recordError(source: string, error: unknown): void {
         const message = error instanceof Error ? error.message : String(error)
@@ -123,9 +128,23 @@ export default function App() {
             setSelectedRecordKey(null)
 
             setPreloadProject(null)
+            setMetaDatasets([])
             setProject(null)
             setProjectRootPath(null)
             setDirty(false)
+
+            const loadedMeta: JsonDataset[] = []
+            for (const entry of preload.meta) {
+                try {
+                    const files =
+                        entry.mode === PreloadSourceMode.Json
+                            ? [await invoke<ProjectFileEntry>('read_json_file', { path: entry.path })]
+                            : await invoke<ProjectFileEntry[]>('read_project_files', { rootPath: entry.path })
+                    loadedMeta.push(...parseMetaEntriesFromEntries(files))
+                } catch (error) {
+                    recordError(`meta-preload ${entry.path}`, error)
+                }
+            }
 
             let mergedProject: ProjectData | null = null
             for (const entry of preload.mods) {
@@ -144,6 +163,7 @@ export default function App() {
             }
 
             if (cancelled) return
+            setMetaDatasets(loadedMeta)
             setPreloadProject(mergedProject)
             const firstMod = mergedProject?.mods[0] ?? null
             const firstGroup = firstMod?.groups[0] ?? null
@@ -376,7 +396,13 @@ export default function App() {
                     onSelectGroup={(modId, groupKey) => handleSelectGroup('project', modId, groupKey)}
                 />
                 <DataTable groupKey={groupKey} records={records} selectedKey={selectedRecordKey} onSelect={setSelectedRecordKey} />
-                <JsonEditor groupKey={groupKey} record={selectedRecord} onUpdate={handleUpdateRecord} />
+                <JsonEditor
+                    groupKey={groupKey}
+                    record={selectedRecord}
+                    metaDatasets={metaDatasets}
+                    affixRecords={affixRecords}
+                    onUpdate={handleUpdateRecord}
+                />
             </main>
             {bootError ? (
                 <div className="flex shrink-0 items-center gap-2 border-t border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">

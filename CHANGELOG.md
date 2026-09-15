@@ -4,6 +4,20 @@
 
 ## [2026-09-15]
 
+-   feat(destop): 数据表格按 id/主键的数字升序排序，避免字符串排序导致 1/10/100/1000 相邻错序。
+-   test(destop): 补充数据表格数字排序测试。
+
+-   feat(types): buff 的 isHide/ShowOnlyOne 与 skill/shenTong 的 DF 类型改为 0|1 枚举。
+-   feat(destop): 上述 0|1 字段改为勾选式复选框，勾选为是/1，未勾选为否/0。
+-   test(destop): 补充 0|1 复选框控件测试。
+
+-   feat(destop): buff/skill/shenTong/item 的 Affix/Affix2 字段改为词缀数据弹窗多选，确认后回填词缀 id 列表。
+-   test(destop): 补充词缀弹窗选择与 id 回填测试。
+
+-   feat(types): TuJianChunWenBenItem 的 name1/typenum/type 引用 AffixProjectTypeItem/AffixTypeItem 字段类型。
+-   feat(destop): Meta 预加载的 AffixProjectType/AffixType 作为词缀数据枚举，用于编辑器下拉选择。
+-   test(destop): 补充词缀 meta 枚举选项与 JsonEditor 联动测试。
+
 -   feat(destop): JSON 编辑器中的数组字段改为紧凑表格，支持逐项编辑、添加与删除数组项。
 -   test(destop): 补充 JsonEditor 数组项增删改测试。
 
