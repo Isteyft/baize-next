@@ -1,4 +1,12 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import {
+    type MutableRefObject,
+    type PointerEvent as ReactPointerEvent,
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+} from 'react'
 
 /**
  通用滚动区域组件。
@@ -12,6 +20,8 @@ interface ScrollAreaProps {
     className?: string
     /** 视口 className。 */
     viewportClassName?: string
+    /** 可选的外部视口 ref，便于调用方读取滚动位置或监听滚动。 */
+    viewportRef?: MutableRefObject<HTMLDivElement | null>
 }
 
 const TRACK_CLASS = 'shrink-0 border-line-strong transition-colors'
@@ -25,8 +35,8 @@ interface ThumbGeometry {
     hScrollable: boolean
 }
 
-export function ScrollArea({ children, className = '', viewportClassName = '' }: ScrollAreaProps) {
-    const viewportRef = useRef<HTMLDivElement>(null)
+export function ScrollArea({ children, className = '', viewportClassName = '', viewportRef: externalViewportRef }: ScrollAreaProps) {
+    const viewportRef = useRef<HTMLDivElement | null>(null)
     const vTrackRef = useRef<HTMLDivElement>(null)
     const hTrackRef = useRef<HTMLDivElement>(null)
     const vThumbRef = useRef<HTMLDivElement>(null)
@@ -34,6 +44,15 @@ export function ScrollArea({ children, className = '', viewportClassName = '' }:
     const geometryRef = useRef({ vTrackH: 0, hTrackW: 0, vMax: 0, hMax: 0, vSize: 0, hSize: 0 })
     const rafRef = useRef<number | null>(null)
     const [thumbs, setThumbs] = useState<ThumbGeometry>({ vSize: 0, hSize: 0, vScrollable: false, hScrollable: false })
+
+    /** 同时写入内部 ref 与外部 ref，保证滚动逻辑与调用方共用同一个视口节点。 */
+    const setViewportRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            viewportRef.current = node
+            if (externalViewportRef) externalViewportRef.current = node
+        },
+        [externalViewportRef]
+    )
 
     /** 将当前滚动位置映射为两个滑块的 translate，直接刷新滑块 DOM，避免逐帧重渲染。 */
     const applyOffsets = useCallback(() => {
@@ -168,7 +187,7 @@ export function ScrollArea({ children, className = '', viewportClassName = '' }:
             {/* 内容区 + 横向轨道 */}
             <div className="flex min-w-0 flex-1 flex-col">
                 <div
-                    ref={viewportRef}
+                    ref={setViewportRef}
                     onScroll={scheduleRefresh}
                     className={`min-h-0 flex-1 overflow-scroll scrollbar-none ${viewportClassName}`}
                 >

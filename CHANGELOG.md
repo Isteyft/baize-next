@@ -4,6 +4,11 @@
 
 ## [2026-09-15]
 
+-   perf(destop): 数据表格改为固定行高虚拟滚动，仅渲染可视行与缓冲行，缓解上千行数据切换分组时的卡顿。
+-   perf(destop): 表格字段收集与排序改为 useMemo 缓存并预计算排序键，选中行改用 memo 行组件，减少重复渲染。
+-   feat(destop): ScrollArea 支持外部传入 viewportRef，便于调用方读取滚动位置。
+-   test(destop): 补充可视范围计算、长表格虚拟渲染与滚动窗口移动测试。
+-   chore: 补充 overscan 自定义拼写词条。
 -   feat(destop): 数据表格按 id/主键的数字升序排序，避免字符串排序导致 1/10/100/1000 相邻错序。
 -   test(destop): 补充数据表格数字排序测试。
 
