@@ -4,6 +4,7 @@
 
 ## [2026-09-15]
 
+-   fix(destop): 中间表格按分组类型显示主键列，无主键字段的数据不再生成伪 ID。
 -   feat(destop): 设置窗口新增“语言”下拉框，按主题模式持久化并跨窗口同步。
 -   feat(types): 新增 AppLanguage 枚举，并将 ProjectSettings.language 提供给设置存储。
 -   docs(i18n): 补充 en/zh-CN 语言设置相关文案。
