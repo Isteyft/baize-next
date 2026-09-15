@@ -28,6 +28,12 @@ const PRIMARY_FIELDS: Partial<Record<ProjectModGroupKey, string>> = {
     shenTong: 'id',
     npcType: 'id',
     npcWuDao: 'id',
+    tuJianChunWenBen: 'id',
+}
+
+/** 暂不展示的词缀填写字段。 */
+const HIDDEN_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
+    tuJianChunWenBen: ['name1'],
 }
 
 export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTableProps) {
@@ -35,7 +41,8 @@ export function DataTable({ groupKey, records, selectedKey, onSelect }: DataTabl
     // 主键列按分组类型显示；分组不存在主键字段时不生成伪 ID。
     const primaryField = groupKey ? (PRIMARY_FIELDS[groupKey] ?? null) : null
     const hasPrimaryField = primaryField !== null && records.some(record => record.data[primaryField] !== undefined)
-    const fields = allFields.filter(field => field !== 'key' && field !== primaryField)
+    const hiddenFields = groupKey ? (HIDDEN_FIELDS[groupKey] ?? []) : []
+    const fields = allFields.filter(field => field !== 'key' && field !== primaryField && !hiddenFields.includes(field))
 
     return (
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden">

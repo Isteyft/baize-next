@@ -156,6 +156,14 @@ const GROUP_FIELD_LABELS: Record<string, Record<string, string>> = {
         value21: '魔',
         wudaoID: '悟道神通',
     },
+    tuJianChunWenBen: {
+        id: '词缀条目ID',
+        name1: '词缀项目值',
+        typenum: '词缀项目',
+        type: '指示物',
+        name2: '名称',
+        descr: '描述',
+    },
 }
 
 /** ??????? */

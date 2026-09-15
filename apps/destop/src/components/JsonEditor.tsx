@@ -16,6 +16,11 @@ interface JsonEditorProps {
 const inputClass =
     'w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-ink transition-colors placeholder:text-ink-subtle focus:border-accent focus:outline-none'
 
+/** 暂不展示的词缀填写字段。 */
+const HIDDEN_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
+    tuJianChunWenBen: ['name1'],
+}
+
 function JsonComplexInput({ value, onCommit }: { value: JsonValue; onCommit: (value: JsonValue) => void }) {
     const [draft, setDraft] = useState(() => JSON.stringify(value, null, 2))
     const [error, setError] = useState<string | null>(null)
@@ -88,7 +93,8 @@ function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (valu
 }
 
 export function JsonEditor({ groupKey, record, onUpdate }: JsonEditorProps) {
-    const fields = record ? Object.keys(record.data) : []
+    const hiddenFields = groupKey ? (HIDDEN_FIELDS[groupKey] ?? []) : []
+    const fields = record ? Object.keys(record.data).filter(field => !hiddenFields.includes(field)) : []
 
     return (
         <section className="flex w-96 shrink-0 flex-col overflow-hidden border-l border-line bg-panel">
@@ -98,10 +104,6 @@ export function JsonEditor({ groupKey, record, onUpdate }: JsonEditorProps) {
             <ScrollArea className="flex-1" viewportClassName="h-full">
                 {record ? (
                     <div className="space-y-4 p-3">
-                        <div className="flex items-baseline justify-between gap-2 border-b border-line pb-2">
-                            <span className="truncate text-sm font-medium text-ink">{record.key}</span>
-                            <span className="shrink-0 text-xs text-ink-subtle">{fields.length} 个字段</span>
-                        </div>
                         {fields.map(field => {
                             const label = groupKey ? translateField(groupKey, field) : field
                             const value = record.data[field]

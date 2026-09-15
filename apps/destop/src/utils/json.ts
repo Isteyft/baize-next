@@ -13,6 +13,7 @@ export const PROJECT_GROUP_DEFS: { key: ProjectModGroupKey; label: string }[] = 
     { key: 'shenTong', label: '神通' },
     { key: 'npcType', label: 'NPC类型' },
     { key: 'npcWuDao', label: 'NPC悟道' },
+    { key: 'tuJianChunWenBen', label: '词缀数据' },
 ]
 
 /**
@@ -215,6 +216,7 @@ function matchProjectFile(parts: string[]): ProjectFileMatch | null {
     if (rest[1] === 'StaticSkillJsonData.json') return { modName, groupKey: 'skill' }
     if (rest[1] === 'NPCLeiXingDate.json') return { modName, groupKey: 'npcType' }
     if (rest[1] === 'NPCWuDaoJson.json') return { modName, groupKey: 'npcWuDao' }
+    if (rest[1] === 'TuJianChunWenBen.json') return { modName, groupKey: 'tuJianChunWenBen' }
     return null
 }
 
@@ -261,7 +263,13 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
             const bucket = groupFiles.get(def.key) ?? []
             const records: JsonRecord[] = []
 
-            if (def.key === 'config' || def.key === 'skill' || def.key === 'npcType' || def.key === 'npcWuDao') {
+            if (
+                def.key === 'config' ||
+                def.key === 'skill' ||
+                def.key === 'npcType' ||
+                def.key === 'npcWuDao' ||
+                def.key === 'tuJianChunWenBen'
+            ) {
                 for (const entry of bucket) {
                     const fileName = entry.relativePath.split('/').pop() ?? 'root'
                     const dataset = parseJsonContent(fileName.replace(/\.json$/i, ''), entry.content)
@@ -348,8 +356,8 @@ function recordsToMap(records: JsonRecord[]): Record<string, JsonValue> {
     return map
 }
 
-/** 单个文件承载全部分组数据的分组（config/skill/npcType/npcWuDao）。 */
-const SINGLE_FILE_GROUPS = new Set<ProjectModGroupKey>(['config', 'skill', 'npcType', 'npcWuDao'])
+/** 单个文件承载全部分组数据的分组（config/skill/npcType/npcWuDao/tuJianChunWenBen）。 */
+const SINGLE_FILE_GROUPS = new Set<ProjectModGroupKey>(['config', 'skill', 'npcType', 'npcWuDao', 'tuJianChunWenBen'])
 
 /** 每个分组的原始文件位置，用于将编辑结果写回原文件。 */
 const GROUP_FILE_PATHS: Partial<Record<ProjectModGroupKey, (modName: string, recordKey: string) => string>> = {
@@ -364,6 +372,7 @@ const SINGLE_FILE_PATHS: Partial<Record<ProjectModGroupKey, (modName: string) =>
     skill: modName => `plugins/Next/_/mod_${modName}/Data/StaticSkillJsonData.json`,
     npcType: modName => `plugins/Next/_/mod_${modName}/Data/NPCLeiXingDate.json`,
     npcWuDao: modName => `plugins/Next/_/mod_${modName}/Data/NPCWuDaoJson.json`,
+    tuJianChunWenBen: modName => `plugins/Next/_/mod_${modName}/Data/TuJianChunWenBen.json`,
 }
 
 /**

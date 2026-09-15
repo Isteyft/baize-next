@@ -33,3 +33,5 @@ yuanying
 huan
 zhong
 zhen
+Chun
+typenum

@@ -143,6 +143,14 @@
     "seid": "功法特性",
     "typePinJie": "功法技能品阶"
   },
+  "TuJianChunWenBen": {
+    "id": "词缀条目ID",
+    "name1": "词缀项目值",
+    "typenum": "词缀项目",
+    "type": "指示物",
+    "name2": "名称",
+    "descr": "描述"
+  },
   "ModConfig": {
     "Name": "mod名称",
     "Author": "作者",

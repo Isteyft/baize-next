@@ -143,6 +143,14 @@
     "seid": "seid",
     "typePinJie": "typePinJie"
   },
+  "TuJianChunWenBen": {
+    "id": "id",
+    "name1": "name1",
+    "typenum": "typenum",
+    "type": "type",
+    "name2": "name2",
+    "descr": "descr"
+  },
   "ModConfig": {
     "Name": "Name",
     "Author": "Author",
