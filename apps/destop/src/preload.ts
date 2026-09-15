@@ -7,17 +7,19 @@ export interface PreloadSourceEntry {
 }
 
 export interface PreloadSettings {
-    entries: PreloadSourceEntry[]
+    meta: PreloadSourceEntry[]
+    mods: PreloadSourceEntry[]
 }
 
 const STORAGE_KEY = 'baize-next.preload-settings'
 
 export const DEFAULT_PRELOAD_MODE = PreloadSourceMode.Directory
-export const DEFAULT_PRELOAD_PATH = './Editor'
+export const DEFAULT_META_PRELOAD_PATH = './Editor'
+export const DEFAULT_MOD_PRELOAD_PATH = './Editor'
 
 export const PRELOAD_MODE_OPTIONS: { value: PreloadSourceMode; label: string }[] = [
-    { value: PreloadSourceMode.Directory, label: '\u52a0\u8f7d\u76ee\u5f55' },
-    { value: PreloadSourceMode.Json, label: '\u52a0\u8f7d JSON' },
+    { value: PreloadSourceMode.Directory, label: '加载目录' },
+    { value: PreloadSourceMode.Json, label: '加载 JSON' },
 ]
 
 function isPreloadMode(value: string | null): value is PreloadSourceMode {
@@ -40,6 +42,12 @@ function normalizeEntry(value: unknown): PreloadSourceEntry | null {
     return { id: entry.id, mode, path: entry.path }
 }
 
+function normalizeEntries(value: unknown): PreloadSourceEntry[] | null {
+    if (!Array.isArray(value)) return null
+    const entries = value.map(normalizeEntry).filter((entry): entry is PreloadSourceEntry => entry !== null)
+    return entries.length > 0 ? entries : null
+}
+
 export function getSavedPreloadSettings(): PreloadSettings {
     try {
         const raw = localStorage.getItem(STORAGE_KEY)
@@ -47,15 +55,20 @@ export function getSavedPreloadSettings(): PreloadSettings {
             const parsed = JSON.parse(raw) as unknown
             if (parsed && typeof parsed === 'object') {
                 const data = parsed as Record<string, unknown>
-                if (Array.isArray(data.entries)) {
-                    const entries = data.entries.map(normalizeEntry).filter((entry): entry is PreloadSourceEntry => entry !== null)
-                    if (entries.length > 0) return { entries }
+                const meta = normalizeEntries(data.meta)
+                const mods = normalizeEntries(data.mods)
+                if (meta || mods) {
+                    return {
+                        meta: meta ?? [createPreloadEntry(DEFAULT_PRELOAD_MODE, DEFAULT_META_PRELOAD_PATH)],
+                        mods: mods ?? [],
+                    }
                 }
                 const oldMode = data.mode
                 const oldPath = data.path
                 if (typeof oldMode === 'string' && typeof oldPath === 'string') {
                     return {
-                        entries: [createPreloadEntry(isPreloadMode(oldMode) ? oldMode : DEFAULT_PRELOAD_MODE, oldPath)],
+                        meta: [createPreloadEntry(isPreloadMode(oldMode) ? oldMode : DEFAULT_PRELOAD_MODE, oldPath)],
+                        mods: [],
                     }
                 }
             }
@@ -63,7 +76,10 @@ export function getSavedPreloadSettings(): PreloadSettings {
     } catch {
         // Ignore storage failures.
     }
-    return { entries: [createPreloadEntry(DEFAULT_PRELOAD_MODE, DEFAULT_PRELOAD_PATH)] }
+    return {
+        meta: [createPreloadEntry(DEFAULT_PRELOAD_MODE, DEFAULT_META_PRELOAD_PATH)],
+        mods: [],
+    }
 }
 
 export function savePreloadSettings(settings: PreloadSettings): void {

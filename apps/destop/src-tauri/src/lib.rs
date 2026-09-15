@@ -1,4 +1,4 @@
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+﻿#[cfg_attr(mobile, tauri::mobile_entry_point)]
 
 use serde::Serialize;
 use std::io::Write;
@@ -75,6 +75,27 @@ fn read_json_file(path: String) -> Result<ProjectFileEntry, String> {
     Ok(ProjectFileEntry { relative_path, content })
 }
 
+/// 将 JSON 文本写回项目内的相对路径，父目录不存在时自动创建。
+#[tauri::command]
+fn write_project_file(root_path: String, relative_path: String, content: String) -> Result<(), String> {
+    let root = Path::new(&root_path);
+    if !root.is_dir() {
+        return Err("Project root is not a directory".into());
+    }
+    let relative = Path::new(&relative_path);
+    if relative.is_absolute() {
+        return Err("Relative path is required".into());
+    }
+    let target = root.join(relative);
+    if !target.starts_with(root) {
+        return Err("Target path escapes the project root".into());
+    }
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(&target, content).map_err(|error| error.to_string())
+}
+
 
 fn error_log_path() -> Result<std::path::PathBuf, String> {
     std::env::current_dir()
@@ -111,7 +132,14 @@ fn read_error_log() -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![read_project_files, read_json_file, reset_error_log, append_error_log, read_error_log])
+        .invoke_handler(tauri::generate_handler![
+            read_project_files,
+            read_json_file,
+            write_project_file,
+            reset_error_log,
+            append_error_log,
+            read_error_log
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run baize-next-destop");
 }

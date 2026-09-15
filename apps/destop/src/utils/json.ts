@@ -1,4 +1,4 @@
-import type { JsonDataset, JsonRecord, JsonValue, ProjectData, ProjectMod, ProjectModGroup, ProjectModGroupKey } from '@baize-next/types'
+﻿import type { JsonDataset, JsonRecord, JsonValue, ProjectData, ProjectMod, ProjectModGroup, ProjectModGroupKey } from '@baize-next/types'
 
 /**
  * JSON 解析与项目结构工具。
@@ -215,67 +215,7 @@ function matchProjectFile(parts: string[]): ProjectFileMatch | null {
     if (rest[1] === 'StaticSkillJsonData.json') return { modName, groupKey: 'skill' }
     if (rest[1] === 'NPCLeiXingDate.json') return { modName, groupKey: 'npcType' }
     if (rest[1] === 'NPCWuDaoJson.json') return { modName, groupKey: 'npcWuDao' }
-
     return null
-}
-
-/**
- * 将项目根目录下的文件列表解析为项目结构。
- * 识别 plugins/Next 下的 modXXX，并按需要汇总 BuffJsonData/ItemJsonData/skillJsonData。
- * @param files webkitdirectory 选出的项目文件。
- * @returns 解析后的项目结构。
- */
-export async function parseProjectFromFiles(files: File[]): Promise<ProjectData> {
-    const projectName = files[0]?.webkitRelativePath.split('/')[0] || '未命名项目'
-    const grouped = new Map<string, Map<ProjectModGroupKey, File[]>>()
-
-    for (const file of files) {
-        if (!file.webkitRelativePath) continue
-        const parts = file.webkitRelativePath.split('/').filter(Boolean)
-        const match = matchProjectFile(parts)
-        if (!match) continue
-
-        const modMap = grouped.get(match.modName) ?? new Map<ProjectModGroupKey, File[]>()
-        const bucket = modMap.get(match.groupKey) ?? []
-        bucket.push(file)
-        modMap.set(match.groupKey, bucket)
-        grouped.set(match.modName, modMap)
-    }
-
-    const mods: ProjectMod[] = []
-    for (const [modName, groupFiles] of grouped) {
-        const groups: ProjectModGroup[] = []
-
-        for (const def of PROJECT_GROUP_DEFS) {
-            const bucket = groupFiles.get(def.key) ?? []
-            const records: JsonRecord[] = []
-
-            if (def.key === 'config' || def.key === 'skill' || def.key === 'npcType' || def.key === 'npcWuDao') {
-                // 单文件记录映射类型
-                for (const file of bucket) {
-                    const content = await readFileAsText(file)
-                    const dataset = parseJsonContent(file.name.replace(/\.json$/i, ''), content)
-                    records.push(...dataset.records)
-                }
-            } else {
-                // 目录下 1json1数据 类型，全部读取后合并为一组
-                for (const file of bucket) {
-                    const content = await readFileAsText(file)
-                    const parsed: unknown = parseJsonText(content)
-                    if (!isRecordObject(parsed)) {
-                        throw new Error(`文件 ${file.name} 不是对象，无法作为记录`)
-                    }
-                    records.push({ key: resolveRecordKey(parsed, file.name.replace(/\.json$/i, '')), data: parsed })
-                }
-            }
-
-            groups.push({ key: def.key, label: def.label, records })
-        }
-
-        mods.push({ id: createDatasetId(modName), name: modName, groups })
-    }
-
-    return { id: createDatasetId(projectName), name: projectName, mods }
 }
 
 /** 原生目录读取返回的项目 JSON 文件条目。 */
@@ -347,50 +287,109 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
     return { id: createDatasetId(projectName), name: projectName, mods }
 }
 
-/** 预加载分组的标签。*/
-const PRELOAD_MOD_NAME = 'Editor 预加载'
-const PRELOAD_GROUP_LABEL = '预加载'
+/** Meta 预加载分组的标签。 */
+const META_PRELOAD_LABEL = 'Meta 预加载'
 
 function preloadEntryName(entry: ProjectFileEntry): string {
     const fileName = entry.relativePath.split('/').pop() ?? entry.relativePath
     return fileName.replace(/\.json$/i, '')
 }
 
-/** 将单个 JSON 文件解析为一个预加载 mod。*/
-export function parsePreloadJsonEntry(entry: ProjectFileEntry): ProjectData {
+/** 将单个 JSON 文件解析为一个 Meta 预加载数据集。 */
+export function parseMetaJsonEntry(entry: ProjectFileEntry): JsonDataset {
+    const name = preloadEntryName(entry)
+    return parseJsonContent(name, entry.content)
+}
+
+/** 将目录中的 Meta JSON 归纳为枚举式数据集。 */
+export function parseMetaEntriesFromEntries(entries: ProjectFileEntry[]): JsonDataset[] {
+    return entries.map(entry => parseMetaJsonEntry(entry))
+}
+
+/** 将 mod 预加载目录解析为项目结构。 */
+export async function parseModPreloadFromEntries(rootPath: string, entries: ProjectFileEntry[]): Promise<ProjectData> {
+    return parseProjectFromEntries(rootPath, entries)
+}
+
+/** 将 mod 预加载 JSON 文件解析为项目结构。 */
+export function parseModPreloadJsonEntry(entry: ProjectFileEntry): ProjectData {
     const name = preloadEntryName(entry)
     const dataset = parseJsonContent(name, entry.content)
     const mod: ProjectMod = {
         id: createDatasetId(name),
         name,
-        groups: [{ key: 'preload', label: PRELOAD_GROUP_LABEL, records: dataset.records }],
+        groups: [{ key: 'preload', label: META_PRELOAD_LABEL, records: dataset.records }],
     }
     return { id: createDatasetId(`preload-${name}`), name, mods: [mod] }
 }
 
-/** 将目录中的 mod JSON 归纳为已识别的 mod 结构，剩余 JSON 统一放入预加载分组。*/
-export async function parsePreloadProjectFromEntries(rootPath: string, entries: ProjectFileEntry[]): Promise<ProjectData> {
-    const project = await parseProjectFromEntries(rootPath, entries)
-    const unmatched = entries.filter(entry => {
-        const parts = entry.relativePath.split('/').filter(Boolean)
-        return !matchProjectFile(parts)
-    })
-    if (unmatched.length === 0) return project
+/** 写回项目 JSON 文件时使用的相对路径与文本内容。 */
+export interface ProjectFileWrite {
+    /** 相对项目根目录的路径，统一使用 / 分隔。 */
+    relativePath: string
+    /** 需要写入的 JSON 文本。 */
+    content: string
+}
 
-    const records: JsonRecord[] = []
-    for (const entry of unmatched) {
-        records.push(...parseJsonContent(preloadEntryName(entry), entry.content).records)
+/** 按项目的路径规则序列化为 JSON 文本（两空格缩进 + 末尾换行）。 */
+function stringifyJson(value: JsonValue): string {
+    return `${JSON.stringify(value, null, 2)}\n`
+}
+
+/**
+ * 将分组内的记录按原始顺序还原为 `{ key: data }` 映射。
+ * @param records 分组内的记录。
+ */
+function recordsToMap(records: JsonRecord[]): Record<string, JsonValue> {
+    const map: Record<string, JsonValue> = {}
+    for (const record of records) {
+        map[record.key] = record.data
     }
-    const mods =
-        records.length > 0
-            ? [
-                  ...project.mods,
-                  {
-                      id: createDatasetId('editor-preload'),
-                      name: PRELOAD_MOD_NAME,
-                      groups: [{ key: 'preload' as const, label: PRELOAD_GROUP_LABEL, records }],
-                  },
-              ]
-            : project.mods
-    return { ...project, mods }
+    return map
+}
+
+/** 单个文件承载全部分组数据的分组（config/skill/npcType/npcWuDao）。 */
+const SINGLE_FILE_GROUPS = new Set<ProjectModGroupKey>(['config', 'skill', 'npcType', 'npcWuDao'])
+
+/** 每个分组的原始文件位置，用于将编辑结果写回原文件。 */
+const GROUP_FILE_PATHS: Partial<Record<ProjectModGroupKey, (modName: string, recordKey: string) => string>> = {
+    buff: (modName, recordKey) => `plugins/Next/_/mod_${modName}/Data/BuffJsonData/${recordKey}.json`,
+    item: (modName, recordKey) => `plugins/Next/_/mod_${modName}/Data/ItemJsonData/${recordKey}.json`,
+    shenTong: (modName, recordKey) => `plugins/Next/_/mod_${modName}/Data/skillJsonData/${recordKey}.json`,
+}
+
+/** 单文件分组的固定路径。 */
+const SINGLE_FILE_PATHS: Partial<Record<ProjectModGroupKey, (modName: string) => string>> = {
+    config: modName => `plugins/Next/_/mod_${modName}/Config/modConfig.json`,
+    skill: modName => `plugins/Next/_/mod_${modName}/Data/StaticSkillJsonData.json`,
+    npcType: modName => `plugins/Next/_/mod_${modName}/Data/NPCLeiXingDate.json`,
+    npcWuDao: modName => `plugins/Next/_/mod_${modName}/Data/NPCWuDaoJson.json`,
+}
+
+/**
+ * 将项目数据序列化为可写回磁盘的 JSON 文件列表。
+ * @param project 当前项目数据。
+ * @returns 需要写入的文件列表；无 mod 时为空数组。
+ */
+export function serializeProjectFiles(project: ProjectData): ProjectFileWrite[] {
+    const writes: ProjectFileWrite[] = []
+
+    for (const mod of project.mods) {
+        for (const group of mod.groups) {
+            if (SINGLE_FILE_GROUPS.has(group.key)) {
+                const resolve = SINGLE_FILE_PATHS[group.key]
+                if (!resolve) continue
+                writes.push({ relativePath: resolve(mod.name), content: stringifyJson(recordsToMap(group.records)) })
+                continue
+            }
+
+            const resolveRecord = GROUP_FILE_PATHS[group.key]
+            if (!resolveRecord) continue
+            for (const record of group.records) {
+                writes.push({ relativePath: resolveRecord(mod.name, record.key), content: stringifyJson(record.data) })
+            }
+        }
+    }
+
+    return writes
 }

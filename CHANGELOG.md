@@ -4,6 +4,12 @@
 
 ## [2026-09-15]
 
+-   feat(destop): 新增保存项目功能，文件菜单可写回 mod JSON 并显示未保存标记与结果提示。
+-   feat(destop): Tauri 新增 write_project_file 命令，按相对路径写回文件并自动创建父目录。
+-   feat(destop): 项目编辑后标记未保存状态，保存菜单项显示星号标记，保存成功显示已保存提示。
+-   feat(destop): Meta 预加载与 mod 预加载拆分为两类独立配置，设置窗口各维护一份列表。
+-   feat(destop): 左侧栏拆分为“预加载数据”和“项目数据”，支持整区、单个 mod 折叠。
+-   feat(destop): 新建 mod 自动填充默认空分组，右键 mod 支持重命名与删除。
 -   fix(destop): JSON 解析兼容 BOM 与尾逗号，修复 Meta 目录预加载失败。
 -   fix(destop): 中间表格按分组类型显示主键列，无主键字段的数据不再生成伪 ID。
 -   style(destop): Tip 提示改为页面顶部居中显示。

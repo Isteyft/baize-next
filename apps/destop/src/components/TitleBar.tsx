@@ -1,19 +1,26 @@
-import { MenuDropdown } from './MenuDropdown'
+﻿import { MenuDropdown } from './MenuDropdown'
 import { WindowControls } from './WindowControls'
 
 const FILE_TEXT = '\u6587\u4ef6'
 const OPEN_PROJECT_TEXT = '\u6253\u5f00\u9879\u76ee'
+const SAVE_PROJECT_TEXT = '\u4fdd\u5b58\u9879\u76ee'
+const DIRTY_MARK = ' *'
 const ABOUT_TEXT = '\u5173\u4e8e'
 const SETTINGS_TEXT = '\u8bbe\u7f6e'
 const ERROR_LOG_TEXT = '\u9519\u8bef\u65e5\u5fd7'
 
 interface TitleBarProps {
+    /** 是否存在可保存的项目。 */
+    canSaveProject: boolean
+    /** 项目是否有未保存修改。 */
+    projectDirty: boolean
     onOpenProject: () => void
+    onSaveProject: () => void
     onOpenSettings: () => void
     onOpenErrorLog: () => void
 }
 
-export function TitleBar({ onOpenProject, onOpenSettings, onOpenErrorLog }: TitleBarProps) {
+export function TitleBar({ canSaveProject, projectDirty, onOpenProject, onSaveProject, onOpenSettings, onOpenErrorLog }: TitleBarProps) {
     return (
         <header
             data-tauri-drag-region="true"
@@ -27,6 +34,15 @@ export function TitleBar({ onOpenProject, onOpenSettings, onOpenErrorLog }: Titl
                         className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover"
                     >
                         {OPEN_PROJECT_TEXT}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={!canSaveProject}
+                        onClick={onSaveProject}
+                        className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover disabled:cursor-not-allowed disabled:text-ink-subtle disabled:hover:bg-transparent"
+                    >
+                        {SAVE_PROJECT_TEXT}
+                        {projectDirty ? DIRTY_MARK : ''}
                     </button>
                 </MenuDropdown>
                 <MenuDropdown label={ABOUT_TEXT}>
