@@ -3,7 +3,7 @@ import { WindowControls } from './WindowControls'
 
 const FILE_TEXT = '\u6587\u4ef6'
 const OPEN_PROJECT_TEXT = '\u6253\u5f00\u9879\u76ee'
-const SAVE_PROJECT_TEXT = '\u4fdd\u5b58\u9879\u76ee'
+const SAVE_PROJECT_TEXT = '保存全部项目'
 const DIRTY_MARK = ' *'
 const ABOUT_TEXT = '\u5173\u4e8e'
 const SETTINGS_TEXT = '\u8bbe\u7f6e'
@@ -15,6 +15,7 @@ interface TitleBarProps {
     /** 项目是否有未保存修改。 */
     projectDirty: boolean
     onOpenProject: () => void
+    /** 保存全部已打开项目。 */
     onSaveProject: () => void
     onOpenSettings: () => void
     onOpenErrorLog: () => void

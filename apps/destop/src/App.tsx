@@ -24,7 +24,6 @@ import { appendErrorLog, resetErrorLog } from './errorLog'
 import { DEFAULT_META_PRELOAD_PATH, getSavedPreloadSettings, PRELOAD_MODE_OPTIONS } from './preload'
 import { subscribeTheme } from './theme'
 import {
-    collectGroupRecords,
     createDatasetId,
     parseMetaEntriesFromEntries,
     parseModPreloadFromEntries,
@@ -35,22 +34,17 @@ import {
     resolveProjectRecordRelativePath,
     serializeProjectFiles,
 } from './utils/json'
+import {
+    collectGroupRecordsFromProjects,
+    getFirstProjectSelection,
+    removeProjectModRoots,
+    type SelectionSource,
+} from './utils/projectSession'
 import type { SeidDrawerRecords } from './utils/seid'
 
 const PRELOAD_FAILED_LABEL = '\u9884\u52a0\u8f7d\u5931\u8d25'
 const SAVED_TEXT = '\u5df2\u4fdd\u5b58'
 const SAVE_FAILED_TEXT = '\u4fdd\u5b58\u5931\u8d25'
-/** 当前表格与编辑器展示的数据来源。 */
-export type SelectionSource =
-    | { kind: 'preload'; modId: string; groupKey: ProjectModGroupKey }
-    | { kind: 'project'; modId: string; groupKey: ProjectModGroupKey }
-    | null
-
-function mergeProjectData(base: ProjectData | null, next: ProjectData): ProjectData {
-    if (!base) return next
-    return { ...base, mods: [...base.mods, ...next.mods] }
-}
-
 function updateModSeidData(
     mod: ProjectMod,
     dataKey: SeidDataKey,
@@ -117,9 +111,11 @@ function updateProjectGroupRecords(
 }
 
 export default function App() {
-    const [preloadProject, setPreloadProject] = useState<ProjectData | null>(null)
+    const [preloadProjects, setPreloadProjects] = useState<ProjectData[]>([])
+    const [activePreloadProjectId, setActivePreloadProjectId] = useState<string | null>(null)
     const [metaDatasets, setMetaDatasets] = useState<JsonDataset[]>([])
-    const [project, setProject] = useState<ProjectData | null>(null)
+    const [projects, setProjects] = useState<ProjectData[]>([])
+    const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
     const [selection, setSelection] = useState<SelectionSource>(null)
     const [selectedRecordKey, setSelectedRecordKey] = useState<string | null>(null)
     const [selectedRecordKeys, setSelectedRecordKeys] = useState<string[]>([])
@@ -128,38 +124,44 @@ export default function App() {
     const [bootPath, setBootPath] = useState<string>(DEFAULT_META_PRELOAD_PATH)
     const [bootMode, setBootMode] = useState<PreloadSourceMode>(PreloadSourceMode.Directory)
     const [reloadToken, setReloadToken] = useState(0)
-    const [projectRootPath, setProjectRootPath] = useState<string | null>(null)
-    const [pendingDeletedFiles, setPendingDeletedFiles] = useState<string[]>([])
+    const [projectRootPaths, setProjectRootPaths] = useState<Record<string, string>>({})
+    const [pendingDeletedFilesByProject, setPendingDeletedFilesByProject] = useState<Record<string, string[]>>({})
     /** 各 mod 的来源根目录，用于解析 Assets 下的图标等资源。 */
     const [modRootPaths, setModRootPaths] = useState<Record<string, string>>({})
-    const [dirty, setDirty] = useState(false)
+    const [dirtyProjectIds, setDirtyProjectIds] = useState<string[]>([])
     const [tip, setTip] = useState<{ message: string; tone: TipTone } | null>(null)
 
-    const selectedMod =
+    const preloadProject = preloadProjects.find(project => project.id === activePreloadProjectId) ?? preloadProjects[0] ?? null
+    const project = projects.find(item => item.id === activeProjectId) ?? projects[0] ?? null
+    const selectedProject =
         selection?.kind === 'preload'
-            ? (preloadProject?.mods.find(mod => mod.id === selection.modId) ?? null)
+            ? (preloadProjects.find(item => item.id === selection.projectId) ?? null)
             : selection?.kind === 'project'
-              ? (project?.mods.find(mod => mod.id === selection.modId) ?? null)
+              ? (projects.find(item => item.id === selection.projectId) ?? null)
               : null
-    const selectedGroup =
-        selectedMod?.groups.find(
-            group => group.key === (selection?.kind === 'preload' || selection?.kind === 'project' ? selection.groupKey : null)
-        ) ?? null
+    const selectedMod = selectedProject?.mods.find(mod => mod.id === selection?.modId) ?? null
+    const selectedGroup = selectedMod?.groups.find(group => group.key === selection?.groupKey) ?? null
 
     const records: JsonRecord[] = selectedGroup?.records ?? []
-    const groupKey: ProjectModGroupKey | null = selection?.kind === 'preload' || selection?.kind === 'project' ? selection.groupKey : null
+    const groupKey: ProjectModGroupKey | null = selection?.groupKey ?? null
     const selectedRecord = records.find(record => record.key === selectedRecordKey) ?? null
-    const affixRecords = [...collectGroupRecords(preloadProject, 'tuJianChunWenBen'), ...collectGroupRecords(project, 'tuJianChunWenBen')]
-    const shenTongRecords = [...collectGroupRecords(preloadProject, 'shenTong'), ...collectGroupRecords(project, 'shenTong')]
-    const skillRecords = [...collectGroupRecords(preloadProject, 'skill'), ...collectGroupRecords(project, 'skill')]
+    const referenceProjects = [...preloadProjects, ...(project ? [project] : [])]
+    const affixRecords = collectGroupRecordsFromProjects(referenceProjects, 'tuJianChunWenBen')
+    const shenTongRecords = collectGroupRecordsFromProjects(referenceProjects, 'shenTong')
+    const skillRecords = collectGroupRecordsFromProjects(referenceProjects, 'skill')
     const seidDrawerRecords: SeidDrawerRecords = {
-        buff: [...collectGroupRecords(preloadProject, 'buff'), ...collectGroupRecords(project, 'buff')],
-        skill: [...collectGroupRecords(preloadProject, 'shenTong'), ...collectGroupRecords(project, 'shenTong')],
-        staticSkill: [...collectGroupRecords(preloadProject, 'skill'), ...collectGroupRecords(project, 'skill')],
-        item: [...collectGroupRecords(preloadProject, 'item'), ...collectGroupRecords(project, 'item')],
+        buff: collectGroupRecordsFromProjects(referenceProjects, 'buff'),
+        skill: collectGroupRecordsFromProjects(referenceProjects, 'shenTong'),
+        staticSkill: collectGroupRecordsFromProjects(referenceProjects, 'skill'),
+        item: collectGroupRecordsFromProjects(referenceProjects, 'item'),
     }
     /** 当前选中 mod 的名称与根目录，用于定位 mod 内的资源文件。 */
-    const currentRootPath = selection?.kind === 'project' ? projectRootPath : selectedMod ? (modRootPaths[selectedMod.id] ?? null) : null
+    const currentRootPath =
+        selection?.kind === 'project'
+            ? (projectRootPaths[selection.projectId] ?? null)
+            : selectedMod
+              ? (modRootPaths[selectedMod.id] ?? null)
+              : null
     const readAsset = useCallback(
         async (relativePath: string): Promise<string | null> => {
             if (!currentRootPath) return null
@@ -214,12 +216,15 @@ export default function App() {
             setSelectedRecordKey(null)
             setSelectedRecordKeys([])
 
-            setPreloadProject(null)
+            setPreloadProjects([])
+            setActivePreloadProjectId(null)
             setMetaDatasets([])
-            setProject(null)
-            setProjectRootPath(null)
-            setPendingDeletedFiles([])
-            setDirty(false)
+            setProjects([])
+            setActiveProjectId(null)
+            setProjectRootPaths({})
+            setPendingDeletedFilesByProject({})
+            setModRootPaths({})
+            setDirtyProjectIds([])
 
             const loadedMeta: JsonDataset[] = []
             for (const entry of preload.meta) {
@@ -234,7 +239,7 @@ export default function App() {
                 }
             }
 
-            let mergedProject: ProjectData | null = null
+            const loadedProjects: ProjectData[] = []
             const preloadRootPaths: Record<string, string> = {}
             for (const entry of preload.mods) {
                 try {
@@ -248,19 +253,25 @@ export default function App() {
                     for (const mod of loaded.mods) {
                         preloadRootPaths[mod.id] = entry.path
                     }
-                    mergedProject = mergeProjectData(mergedProject, loaded)
+                    loadedProjects.push(loaded)
                 } catch (error) {
                     recordError(`mod-preload ${entry.path}`, error)
                 }
             }
 
             if (cancelled) return
+            const firstProject = loadedProjects[0] ?? null
+            const firstSelection = getFirstProjectSelection('preload', firstProject)
+            const firstGroup = firstSelection
+                ? (firstProject?.mods
+                      .find(mod => mod.id === firstSelection.modId)
+                      ?.groups.find(group => group.key === firstSelection.groupKey) ?? null)
+                : null
             setMetaDatasets(loadedMeta)
             setModRootPaths(preloadRootPaths)
-            setPreloadProject(mergedProject)
-            const firstMod = mergedProject?.mods[0] ?? null
-            const firstGroup = firstMod?.groups[0] ?? null
-            setSelection(firstMod && firstGroup ? { kind: 'preload', modId: firstMod.id, groupKey: firstGroup.key } : null)
+            setPreloadProjects(loadedProjects)
+            setActivePreloadProjectId(firstProject?.id ?? null)
+            setSelection(firstSelection)
             const firstRecordKey = firstGroup?.records[0]?.key ?? null
             setSelectedRecordKey(firstRecordKey)
             setSelectedRecordKeys(firstRecordKey ? [firstRecordKey] : [])
@@ -273,151 +284,254 @@ export default function App() {
         }
     }, [reloadToken])
 
+    function markProjectDirty(projectId: string): void {
+        setDirtyProjectIds(previous => (previous.includes(projectId) ? previous : [...previous, projectId]))
+    }
+
+    function setRecordSelection(records: JsonRecord[]): void {
+        const firstRecordKey = records[0]?.key ?? null
+        setSelectedRecordKey(firstRecordKey)
+        setSelectedRecordKeys(firstRecordKey ? [firstRecordKey] : [])
+    }
+
+    function applyProjectSelection(kind: 'preload' | 'project', target: ProjectData | null): void {
+        const nextSelection = getFirstProjectSelection(kind, target)
+        setSelection(nextSelection)
+        if (!nextSelection) {
+            setRecordSelection([])
+            return
+        }
+        const group =
+            target?.mods.find(mod => mod.id === nextSelection.modId)?.groups.find(group => group.key === nextSelection.groupKey) ?? null
+        setRecordSelection(group?.records ?? [])
+    }
+
     async function handleOpenProject(): Promise<void> {
         try {
             const selected = await open({
                 directory: true,
                 recursive: true,
-                multiple: false,
-                title: '\u9009\u62e9\u9879\u76ee\u76ee\u5f55',
+                multiple: true,
+                title: '选择项目目录',
             })
-            if (typeof selected !== 'string' || !selected) return
-            const entries = await invoke<ProjectFileEntry[]>('read_project_files', { rootPath: selected })
-            const parsedProject = await parseProjectFromEntries(selected, entries)
-            setProject(parsedProject)
-            setProjectRootPath(selected)
-            setPendingDeletedFiles([])
-            setModRootPaths(Object.fromEntries(parsedProject.mods.map(mod => [mod.id, selected])))
-            setDirty(false)
-            const firstMod = parsedProject.mods[0] ?? null
-            const firstGroup = firstMod?.groups[0] ?? null
-            setSelection(firstMod && firstGroup ? { kind: 'project', modId: firstMod.id, groupKey: firstGroup.key } : null)
-            const firstRecordKey = firstGroup?.records[0]?.key ?? null
-            setSelectedRecordKey(firstRecordKey)
-            setSelectedRecordKeys(firstRecordKey ? [firstRecordKey] : [])
+            const selectedPaths = typeof selected === 'string' ? [selected] : Array.isArray(selected) ? selected : []
+            if (selectedPaths.length === 0) return
+
+            const nextProjects: ProjectData[] = []
+            const nextProjectRoots: Record<string, string> = {}
+            const nextModRoots: Record<string, string> = {}
+            let nextActiveProject: ProjectData | null = null
+
+            for (const selectedPath of selectedPaths) {
+                const existingProject = projects.find(item => projectRootPaths[item.id] === selectedPath) ?? null
+                if (existingProject) {
+                    nextActiveProject = existingProject
+                    continue
+                }
+
+                try {
+                    const entries = await invoke<ProjectFileEntry[]>('read_project_files', { rootPath: selectedPath })
+                    const parsedProject = await parseProjectFromEntries(selectedPath, entries)
+                    nextProjects.push(parsedProject)
+                    nextProjectRoots[parsedProject.id] = selectedPath
+                    for (const mod of parsedProject.mods) {
+                        nextModRoots[mod.id] = selectedPath
+                    }
+                    nextActiveProject = parsedProject
+                } catch (error) {
+                    recordError(`open-project ${selectedPath}`, error)
+                }
+            }
+
+            if (nextProjects.length > 0) {
+                setProjects(previous => [...previous, ...nextProjects])
+                setProjectRootPaths(previous => ({ ...previous, ...nextProjectRoots }))
+                setModRootPaths(previous => ({ ...previous, ...nextModRoots }))
+            }
+
+            if (nextActiveProject) {
+                setActiveProjectId(nextActiveProject.id)
+                applyProjectSelection('project', nextActiveProject)
+            }
         } catch (error) {
             recordError('open-project', error)
         }
     }
 
-    function handleSelectGroup(kind: 'preload' | 'project', modId: string, groupKey: ProjectModGroupKey): void {
-        const mod = (kind === 'preload' ? preloadProject : project)?.mods.find(item => item.id === modId)
-        const group = mod?.groups.find(item => item.key === groupKey)
-        setSelection({ kind, modId, groupKey })
-        const firstRecordKey = group?.records[0]?.key ?? null
-        setSelectedRecordKey(firstRecordKey)
-        setSelectedRecordKeys(firstRecordKey ? [firstRecordKey] : [])
+    function handleSelectGroup(kind: 'preload' | 'project', projectId: string, modId: string, groupKey: ProjectModGroupKey): void {
+        const targetProject = (kind === 'preload' ? preloadProjects : projects).find(item => item.id === projectId) ?? null
+        const group = targetProject?.mods.find(mod => mod.id === modId)?.groups.find(item => item.key === groupKey) ?? null
+        if (!group) return
+        if (kind === 'preload') {
+            setActivePreloadProjectId(projectId)
+        } else {
+            setActiveProjectId(projectId)
+        }
+        setSelection({ kind, projectId, modId, groupKey })
+        setRecordSelection(group.records)
     }
 
-    function handleCreateMod(name: string): void {
+    function handleCreateMod(projectId: string, name: string): void {
         const modName = name.trim()
         if (!modName) return
-        setDirty(true)
-        setProject(prev => {
-            const base = prev ?? { id: createDatasetId('project'), name: '未命名项目', mods: [] }
-            return { ...base, mods: [...base.mods, createEmptyMod(modName)] }
+        const target = projects.find(item => item.id === projectId)
+        if (!target) return
+
+        const newMod = createEmptyMod(modName)
+        markProjectDirty(projectId)
+        setProjects(previous => previous.map(item => (item.id === projectId ? { ...item, mods: [...item.mods, newMod] } : item)))
+        setActiveProjectId(projectId)
+        const firstGroup = newMod.groups[0] ?? null
+        if (firstGroup) {
+            setSelection({ kind: 'project', projectId, modId: newMod.id, groupKey: firstGroup.key })
+            setRecordSelection(firstGroup.records)
+        } else {
+            setSelection(null)
+            setRecordSelection([])
+        }
+    }
+
+    function handleRenameMod(projectId: string, modId: string, name: string): void {
+        const modName = name.trim()
+        if (!modName) return
+        markProjectDirty(projectId)
+        setProjects(previous =>
+            previous.map(project =>
+                project.id === projectId
+                    ? { ...project, mods: project.mods.map(mod => (mod.id === modId ? { ...mod, name: modName } : mod)) }
+                    : project
+            )
+        )
+    }
+
+    function handleClosePreloadProject(projectId: string): void {
+        const closingProject = preloadProjects.find(item => item.id === projectId) ?? null
+        if (!closingProject) return
+        const remainingProjects = preloadProjects.filter(item => item.id !== projectId)
+        const closingActiveProject = activePreloadProjectId === projectId || preloadProject?.id === projectId
+        const nextActiveProject = closingActiveProject ? (remainingProjects[0] ?? null) : preloadProject
+
+        setPreloadProjects(remainingProjects)
+        setActivePreloadProjectId(nextActiveProject?.id ?? null)
+        setModRootPaths(previous => removeProjectModRoots(previous, closingProject))
+
+        if (selection?.kind === 'preload' && selection.projectId === projectId) {
+            applyProjectSelection('preload', nextActiveProject)
+        }
+    }
+
+    function handleDeletePreloadMod(projectId: string, modId: string): void {
+        const target = preloadProjects.find(item => item.id === projectId)
+        if (!target) return
+        const remainingMods = target.mods.filter(mod => mod.id !== modId)
+        const deletedMod = target.mods.find(mod => mod.id === modId) ?? null
+        setPreloadProjects(previous => previous.map(project => (project.id === projectId ? { ...project, mods: remainingMods } : project)))
+        if (deletedMod) {
+            setModRootPaths(previous => removeProjectModRoots(previous, { ...target, mods: [deletedMod] }))
+        }
+        if (selection?.kind === 'preload' && selection.projectId === projectId && selection.modId === modId) {
+            const nextSelection = getFirstProjectSelection('preload', { ...target, mods: remainingMods })
+            setSelection(nextSelection)
+            const nextGroup = nextSelection
+                ? (remainingMods.find(mod => mod.id === nextSelection.modId)?.groups.find(group => group.key === nextSelection.groupKey) ??
+                  null)
+                : null
+            setRecordSelection(nextGroup?.records ?? [])
+        }
+    }
+
+    function handleDeleteMod(projectId: string, modId: string): void {
+        const target = projects.find(item => item.id === projectId)
+        if (!target) return
+        const remainingMods = target.mods.filter(mod => mod.id !== modId)
+        const deletedMod = target.mods.find(mod => mod.id === modId) ?? null
+        markProjectDirty(projectId)
+        setProjects(previous => previous.map(project => (project.id === projectId ? { ...project, mods: remainingMods } : project)))
+        if (deletedMod) {
+            const deletedFiles = serializeProjectFiles({ ...target, mods: [deletedMod] }).map(write => write.relativePath)
+            if (deletedFiles.length > 0) {
+                setPendingDeletedFilesByProject(previous => ({
+                    ...previous,
+                    [projectId]: [...new Set([...(previous[projectId] ?? []), ...deletedFiles])],
+                }))
+            }
+            setModRootPaths(previous => removeProjectModRoots(previous, { ...target, mods: [deletedMod] }))
+        }
+        if (selection?.kind === 'project' && selection.projectId === projectId && selection.modId === modId) {
+            const nextSelection = getFirstProjectSelection('project', { ...target, mods: remainingMods })
+            setSelection(nextSelection)
+            const nextGroup = nextSelection
+                ? (remainingMods.find(mod => mod.id === nextSelection.modId)?.groups.find(group => group.key === nextSelection.groupKey) ??
+                  null)
+                : null
+            setRecordSelection(nextGroup?.records ?? [])
+        }
+    }
+
+    function handleCloseProject(projectId: string): void {
+        const closingProject = projects.find(item => item.id === projectId) ?? null
+        if (!closingProject) return
+        const remainingProjects = projects.filter(item => item.id !== projectId)
+        const nextActiveProject = activeProjectId === projectId ? (remainingProjects[0] ?? null) : (project ?? null)
+
+        setProjects(remainingProjects)
+        setActiveProjectId(nextActiveProject?.id ?? null)
+        setProjectRootPaths(previous => {
+            const next = { ...previous }
+            delete next[projectId]
+            return next
         })
-    }
+        setPendingDeletedFilesByProject(previous => {
+            const next = { ...previous }
+            delete next[projectId]
+            return next
+        })
+        setDirtyProjectIds(previous => previous.filter(id => id !== projectId))
+        setModRootPaths(previous => removeProjectModRoots(previous, closingProject))
 
-    function handleRenameMod(modId: string, name: string): void {
-        const modName = name.trim()
-        if (!modName) return
-        setDirty(true)
-        setProject(prev => (prev ? { ...prev, mods: prev.mods.map(mod => (mod.id === modId ? { ...mod, name: modName } : mod)) } : prev))
-    }
-
-    function handleDeleteMod(modId: string): void {
-        const remaining = project?.mods.filter(mod => mod.id !== modId) ?? []
-        setDirty(true)
-        setProject(prev => (prev ? { ...prev, mods: prev.mods.filter(mod => mod.id !== modId) } : prev))
-        if (selection?.kind === 'project' && selection.modId === modId) {
-            const nextMod = remaining[0] ?? null
-            const nextGroup = nextMod?.groups[0] ?? null
-            setSelection(nextMod && nextGroup ? { kind: 'project', modId: nextMod.id, groupKey: nextGroup.key } : null)
-            const nextRecordKey = nextGroup?.records[0]?.key ?? null
-            setSelectedRecordKey(nextRecordKey)
-            setSelectedRecordKeys(nextRecordKey ? [nextRecordKey] : [])
+        if (selection?.kind === 'project' && selection.projectId === projectId) {
+            if (nextActiveProject) {
+                applyProjectSelection('project', nextActiveProject)
+            } else if (preloadProject) {
+                applyProjectSelection('preload', preloadProject)
+            } else {
+                setSelection(null)
+                setRecordSelection([])
+            }
         }
     }
 
     function handleUpdateRecord(recordKey: string, field: string, value: JsonValue): void {
-        if (selection?.kind === 'preload') {
-            const { modId, groupKey } = selection
-            setPreloadProject(prev =>
-                prev
-                    ? {
-                          ...prev,
-                          mods: prev.mods.map(mod =>
-                              mod.id === modId
-                                  ? {
-                                        ...mod,
-                                        groups: mod.groups.map(group =>
-                                            group.key === groupKey
-                                                ? {
-                                                      ...group,
-                                                      records: group.records.map(record =>
-                                                          record.key === recordKey
-                                                              ? { ...record, data: { ...record.data, [field]: value } }
-                                                              : record
-                                                      ),
-                                                  }
-                                                : group
-                                        ),
-                                    }
-                                  : mod
-                          ),
-                      }
-                    : prev
-            )
+        if (!selection) return
+
+        const updateProjectRecord = (item: ProjectData): ProjectData =>
+            updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>
+                groupRecords.map(record => (record.key === recordKey ? { ...record, data: { ...record.data, [field]: value } } : record))
+            ) ?? item
+
+        if (selection.kind === 'preload') {
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? updateProjectRecord(item) : item)))
             return
         }
-        if (selection?.kind !== 'project') return
-        const { modId, groupKey } = selection
-        setDirty(true)
-        setProject(prev =>
-            prev
-                ? {
-                      ...prev,
-                      mods: prev.mods.map(mod =>
-                          mod.id === modId
-                              ? {
-                                    ...mod,
-                                    groups: mod.groups.map(group =>
-                                        group.key === groupKey
-                                            ? {
-                                                  ...group,
-                                                  records: group.records.map(record =>
-                                                      record.key === recordKey
-                                                          ? { ...record, data: { ...record.data, [field]: value } }
-                                                          : record
-                                                  ),
-                                              }
-                                            : group
-                                    ),
-                                }
-                              : mod
-                      ),
-                  }
-                : prev
-        )
+
+        markProjectDirty(selection.projectId)
+        setProjects(previous => previous.map(item => (item.id === selection.projectId ? updateProjectRecord(item) : item)))
     }
 
     function handleCreateRecord(recordKey: string, data: Record<string, JsonValue>): void {
         if (!selection) return
         const nextRecord: JsonRecord = { key: recordKey, data }
+
+        const createRecordInProject = (item: ProjectData): ProjectData =>
+            updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>
+                groupRecords.some(record => record.key === recordKey) ? groupRecords : [...groupRecords, nextRecord]
+            ) ?? item
+
         if (selection.kind === 'preload') {
-            setPreloadProject(prev =>
-                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, records =>
-                    records.some(record => record.key === recordKey) ? records : [...records, nextRecord]
-                )
-            )
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? createRecordInProject(item) : item)))
         } else {
-            setDirty(true)
-            setProject(prev =>
-                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, records =>
-                    records.some(record => record.key === recordKey) ? records : [...records, nextRecord]
-                )
-            )
+            markProjectDirty(selection.projectId)
+            setProjects(previous => previous.map(item => (item.id === selection.projectId ? createRecordInProject(item) : item)))
         }
         setSelectedRecordKey(recordKey)
         setSelectedRecordKeys([recordKey])
@@ -429,12 +543,14 @@ export default function App() {
         const remainingRecords = records.filter(record => !keySet.has(record.key))
         const nextSelectedRecord =
             selectedRecordKey && !keySet.has(selectedRecordKey) ? selectedRecordKey : (remainingRecords[0]?.key ?? null)
+
+        const deleteRecordsFromProject = (item: ProjectData): ProjectData =>
+            updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>
+                groupRecords.filter(record => !keySet.has(record.key))
+            ) ?? item
+
         if (selection.kind === 'preload') {
-            setPreloadProject(prev =>
-                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, groupRecords =>
-                    groupRecords.filter(record => !keySet.has(record.key))
-                )
-            )
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? deleteRecordsFromProject(item) : item)))
         } else {
             const modName = selectedMod?.name
             if (modName) {
@@ -442,53 +558,79 @@ export default function App() {
                     .map(recordKey => resolveProjectRecordRelativePath(modName, selection.groupKey, recordKey))
                     .filter((relativePath): relativePath is string => relativePath !== null)
                 if (deletedFiles.length > 0) {
-                    setPendingDeletedFiles(prev => [...new Set([...prev, ...deletedFiles])])
+                    setPendingDeletedFilesByProject(previous => ({
+                        ...previous,
+                        [selection.projectId]: [...new Set([...(previous[selection.projectId] ?? []), ...deletedFiles])],
+                    }))
                 }
             }
-            setDirty(true)
-            setProject(prev =>
-                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, groupRecords =>
-                    groupRecords.filter(record => !keySet.has(record.key))
-                )
-            )
+            markProjectDirty(selection.projectId)
+            setProjects(previous => previous.map(item => (item.id === selection.projectId ? deleteRecordsFromProject(item) : item)))
         }
         setSelectedRecordKey(nextSelectedRecord)
         setSelectedRecordKeys(nextSelectedRecord ? [nextSelectedRecord] : [])
     }
 
     function handleUpdateSeidData(dataKey: SeidDataKey, seidId: string, targetKey: string, value: Record<string, JsonValue> | null): void {
-        if (selection?.kind === 'preload') {
-            setPreloadProject(prev => updateProjectSeidData(prev, selection.modId, dataKey, seidId, targetKey, value))
+        if (!selection) return
+        const updateProjectSeid = (item: ProjectData): ProjectData =>
+            updateProjectSeidData(item, selection.modId, dataKey, seidId, targetKey, value) ?? item
+
+        if (selection.kind === 'preload') {
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? updateProjectSeid(item) : item)))
             return
         }
-        if (selection?.kind !== 'project') return
-        setDirty(true)
-        setProject(prev => updateProjectSeidData(prev, selection.modId, dataKey, seidId, targetKey, value))
+
+        markProjectDirty(selection.projectId)
+        setProjects(previous => previous.map(item => (item.id === selection.projectId ? updateProjectSeid(item) : item)))
     }
 
-    async function handleSaveProject(): Promise<void> {
-        if (!project || !projectRootPath) return
+    async function saveProjectToDisk(target: ProjectData): Promise<number> {
+        const rootPath = projectRootPaths[target.id]
+        if (!rootPath) throw new Error(`项目 ${target.name} 没有可写入的根目录`)
+
+        const writes = serializeProjectFiles(target)
+        const pendingDeletedFiles = pendingDeletedFilesByProject[target.id] ?? []
+        if (writes.length === 0 && pendingDeletedFiles.length === 0) return 0
+
+        for (const relativePath of pendingDeletedFiles) {
+            await invoke('delete_project_file', { rootPath, relativePath })
+        }
+        for (const write of writes) {
+            await invoke('write_project_file', {
+                rootPath,
+                relativePath: write.relativePath,
+                content: write.content,
+            })
+        }
+
+        setPendingDeletedFilesByProject(previous => ({ ...previous, [target.id]: [] }))
+        setDirtyProjectIds(previous => previous.filter(id => id !== target.id))
+        return writes.length + pendingDeletedFiles.length
+    }
+
+    async function handleSaveProject(projectId: string): Promise<void> {
+        const target = projects.find(item => item.id === projectId) ?? null
+        if (!target) return
         try {
-            const writes = serializeProjectFiles(project)
-            if (writes.length === 0 && pendingDeletedFiles.length === 0) {
-                recordError('save-project', new Error('没有可保存的项目数据'))
-                return
-            }
-            for (const relativePath of pendingDeletedFiles) {
-                await invoke('delete_project_file', { rootPath: projectRootPath, relativePath })
-            }
-            for (const write of writes) {
-                await invoke('write_project_file', {
-                    rootPath: projectRootPath,
-                    relativePath: write.relativePath,
-                    content: write.content,
-                })
-            }
-            setPendingDeletedFiles([])
-            setDirty(false)
-            setTip({ message: `${SAVED_TEXT}（${writes.length + pendingDeletedFiles.length} 个文件）`, tone: 'success' })
+            const savedFileCount = await saveProjectToDisk(target)
+            setTip({ message: `${SAVED_TEXT}（${target.name}：${savedFileCount} 个文件）`, tone: 'success' })
         } catch (error) {
             recordError('save-project', error)
+            setTip({ message: SAVE_FAILED_TEXT, tone: 'error' })
+        }
+    }
+
+    async function handleSaveAllProjects(): Promise<void> {
+        if (projects.length === 0) return
+        try {
+            let savedFileCount = 0
+            for (const target of projects) {
+                savedFileCount += await saveProjectToDisk(target)
+            }
+            setTip({ message: `${SAVED_TEXT}（${projects.length} 个项目，${savedFileCount} 个文件）`, tone: 'success' })
+        } catch (error) {
+            recordError('save-all-projects', error)
             setTip({ message: SAVE_FAILED_TEXT, tone: 'error' })
         }
     }
@@ -548,23 +690,27 @@ export default function App() {
     return (
         <div className="flex h-full select-none flex-col bg-base text-ink" onContextMenu={event => event.preventDefault()}>
             <TitleBar
-                canSaveProject={project !== null && projectRootPath !== null}
-                projectDirty={dirty}
+                canSaveProject={projects.length > 0}
+                projectDirty={dirtyProjectIds.length > 0}
                 onOpenProject={() => void handleOpenProject()}
-                onSaveProject={() => void handleSaveProject()}
+                onSaveProject={() => void handleSaveAllProjects()}
                 onOpenSettings={() => void handleOpenSettings()}
                 onOpenErrorLog={() => void handleOpenErrorLog()}
             />
             <main className="flex min-h-0 flex-1">
                 <LeftPanel
-                    preloadProject={preloadProject}
-                    project={project}
+                    preloadProjects={preloadProjects}
+                    projects={projects}
                     selection={selection}
                     onCreateMod={handleCreateMod}
                     onDeleteMod={handleDeleteMod}
+                    onDeletePreloadMod={handleDeletePreloadMod}
+                    onClosePreloadProject={handleClosePreloadProject}
+                    onSaveProject={projectId => void handleSaveProject(projectId)}
                     onRenameMod={handleRenameMod}
-                    onSelectPreloadGroup={(modId, groupKey) => handleSelectGroup('preload', modId, groupKey)}
-                    onSelectGroup={(modId, groupKey) => handleSelectGroup('project', modId, groupKey)}
+                    onCloseProject={handleCloseProject}
+                    onSelectPreloadGroup={(projectId, modId, groupKey) => handleSelectGroup('preload', projectId, modId, groupKey)}
+                    onSelectGroup={(projectId, modId, groupKey) => handleSelectGroup('project', projectId, modId, groupKey)}
                 />
                 <DataTable
                     groupKey={groupKey}
