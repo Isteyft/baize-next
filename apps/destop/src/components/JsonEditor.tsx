@@ -1,10 +1,23 @@
 import { translateField } from '@baize-next/i18n'
-import type { JsonDataset, JsonRecord, JsonValue, ProjectModGroupKey } from '@baize-next/types'
+import type { JsonDataset, JsonRecord, JsonValue, ProjectModGroupKey, ProjectSeidData, SeidDataKey } from '@baize-next/types'
 import { useState } from 'react'
 
-import { getAffixProjectTypeOptions, getAffixSelectOptions, getAffixTypeOptions } from '../utils/json'
+import {
+    getAffixProjectTypeOptions,
+    getAffixSelectOptions,
+    getAffixTypeOptions,
+    getGroupEnumOptions,
+    getMetaStringOptions,
+    GROUP_ICON_FIELDS,
+    hasModIcon,
+    META_DATASET_NAMES,
+    resolveModIconPath,
+} from '../utils/json'
+import { isSeidProjectGroup, type SeidDrawerRecords } from '../utils/seid'
 import { AffixSelect } from './AffixSelect'
+import { AssetIcon } from './AssetIcon'
 import { ScrollArea } from './ScrollArea'
+import { SeidEditor } from './SeidEditor'
 import { Select, type SelectOption } from './Select'
 
 interface JsonEditorProps {
@@ -14,20 +27,53 @@ interface JsonEditorProps {
     record: JsonRecord | null
     metaDatasets?: JsonDataset[]
     affixRecords?: JsonRecord[]
+    /** 当前 mod 文件夹相对项目根目录的路径，用于解析 Assets 下的图标。 */
+    modDirectory?: string | null
+    /** 读取 mod 资源并返回可展示的 data URL。 */
+    readAsset?: ((relativePath: string) => Promise<string | null>) | undefined
     /** 字段变更回调，实时回写表格。 */
+    /** Current mod Seid parameter data. */
+    seidData?: ProjectSeidData
+    /** Records used by Seid SpecialDrawer selectors. */
+    seidRecords?: SeidDrawerRecords
     onUpdate: (recordKey: string, field: string, value: JsonValue) => void
+    /** Callback for Seid parameter changes. */
+    onUpdateSeidData?: (dataKey: SeidDataKey, seidId: string, targetKey: string, value: Record<string, JsonValue> | null) => void
+}
+
+const EMPTY_SEID_RECORDS: SeidDrawerRecords = {
+    buff: [],
+    skill: [],
+    staticSkill: [],
+    item: [],
 }
 
 const inputClass =
     'w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-ink transition-colors placeholder:text-ink-subtle focus:border-accent focus:outline-none'
 
-/** 暂不展示的词缀填写字段。 */
+/** 可通过词缀选择器编辑的字段。 */
 const AFFIX_FIELDS = new Set(['Affix', 'Affix2'])
 
+/** 神通分组保留旧字符段但不展示，避免和 Affix2 混淆。 */
+const LEGACY_AFFIX_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
+    shenTong: ['Affix'],
+}
+
+/** 图标字段优先移动到的编号字段。 */
+const ICON_FIELD_ANCHORS = ['id', 'buffid']
+
+/** 使用 0/1 复选框即可清晰表达的字段。 */
 const BOOL_NUMBER_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     buff: ['isHide', 'ShowOnlyOne'],
     skill: ['DF'],
     shenTong: ['DF'],
+}
+
+/** 字符串型 Meta 枚举字段：分组 -> 字段名 -> 数据集名称。 */
+const META_STRING_FIELDS: Partial<Record<ProjectModGroupKey, Record<string, string>>> = {
+    shenTong: {
+        script: META_DATASET_NAMES.skillAttackScriptType,
+    },
 }
 
 const HIDDEN_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
@@ -143,11 +189,9 @@ function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (valu
     if (value === null) {
         return <input type="text" value="null" readOnly className={`${inputClass} opacity-60`} />
     }
-
     if (typeof value === 'string') {
         return <input type="text" value={value} onChange={event => onChange(event.target.value)} className={inputClass} />
     }
-
     if (typeof value === 'number') {
         return (
             <input
@@ -161,7 +205,6 @@ function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (valu
             />
         )
     }
-
     if (typeof value === 'boolean') {
         return (
             <label className="flex h-9 items-center gap-2 rounded-md border border-line bg-panel px-2.5">
@@ -175,7 +218,6 @@ function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (valu
             </label>
         )
     }
-
     return <JsonComplexInput value={value} onCommit={onChange} />
 }
 
@@ -183,12 +225,53 @@ interface JsonEnumInputProps {
     value: JsonValue
     options: SelectOption<string>[]
     label: string
+    multiple?: boolean
     onSelect: (value: string) => void
 }
 
-function JsonEnumInput({ value, options, label, onSelect }: JsonEnumInputProps) {
-    const current = typeof value === 'string' || typeof value === 'number' ? String(value) : ''
-    return <Select value={current} options={options} onChange={onSelect} aria-label={label} className="w-full" />
+function enumValueOf(value: JsonValue): string {
+    if (typeof value === 'string' || typeof value === 'number') return String(value)
+    return ''
+}
+
+function enumAriaLabel(label: string, options: SelectOption<string>[], current: string, suffix = ''): string {
+    const selected = options.find(option => option.value === current)
+    const base = selected ? `${label}（${selected.label}）` : label
+    return `${base}${suffix}`
+}
+
+function JsonEnumInput({ value, options, label, multiple = false, onSelect }: JsonEnumInputProps) {
+    if (!multiple) {
+        const current = enumValueOf(value)
+        return (
+            <Select
+                value={current}
+                options={options}
+                onChange={onSelect}
+                aria-label={enumAriaLabel(label, options, current)}
+                className="w-full"
+            />
+        )
+    }
+
+    const values = Array.isArray(value) ? value : []
+    return (
+        <div className="space-y-2">
+            {values.map((item, index) => {
+                const current = enumValueOf(item)
+                return (
+                    <Select
+                        key={index}
+                        value={current}
+                        options={options}
+                        onChange={onSelect}
+                        aria-label={enumAriaLabel(label, options, current, ` 第 ${index + 1} 项`)}
+                        className="w-full"
+                    />
+                )
+            })}
+        </div>
+    )
 }
 
 function JsonFlagInput({ value, label, onChange }: { value: JsonValue; label: string; onChange: (value: JsonValue) => void }) {
@@ -207,107 +290,207 @@ function JsonFlagInput({ value, label, onChange }: { value: JsonValue; label: st
     )
 }
 
-export function JsonEditor({ groupKey, record, metaDatasets = [], affixRecords = [], onUpdate }: JsonEditorProps) {
+export function JsonEditor({
+    groupKey,
+    record,
+    metaDatasets = [],
+    affixRecords = [],
+    modDirectory = null,
+    readAsset,
+    seidData = {},
+    seidRecords = EMPTY_SEID_RECORDS,
+    onUpdate,
+    onUpdateSeidData,
+}: JsonEditorProps) {
+    const [seidEditorOpen, setSeidEditorOpen] = useState(false)
     const hiddenFields = groupKey ? (HIDDEN_FIELDS[groupKey] ?? []) : []
-    const fields = record ? Object.keys(record.data).filter(field => !hiddenFields.includes(field)) : []
+    const legacyAffixFields = groupKey ? (LEGACY_AFFIX_FIELDS[groupKey] ?? []) : []
+    const fields = record
+        ? Object.keys(record.data).filter(field => !hiddenFields.includes(field) && !legacyAffixFields.includes(field))
+        : []
+    const iconField = groupKey ? GROUP_ICON_FIELDS[groupKey] : undefined
+    const iconAnchorField =
+        record && iconField ? (ICON_FIELD_ANCHORS.find(anchor => anchor !== iconField && record.data[anchor] !== undefined) ?? null) : null
+    const iconPath =
+        record && modDirectory && hasModIcon(groupKey, record.data) ? resolveModIconPath(modDirectory, groupKey, record.data) : null
+    const seidGroupKey = record && groupKey && isSeidProjectGroup(groupKey) ? groupKey : null
+    if (record && seidGroupKey && !fields.includes('seid')) fields.push('seid')
+
+    function renderControl(field: string) {
+        if (!record) return null
+        const label = groupKey ? translateField(groupKey, field) : field
+        const value = record.data[field]
+        const isAffixField =
+            groupKey !== null &&
+            (groupKey === 'buff' || groupKey === 'item' || groupKey === 'skill' || groupKey === 'shenTong') &&
+            AFFIX_FIELDS.has(field)
+        const isFlagField = groupKey !== null && (BOOL_NUMBER_FIELDS[groupKey] ?? []).includes(field)
+        const metaOptions = getGroupEnumOptions(groupKey, field, metaDatasets)
+        const stringDatasetName = groupKey ? META_STRING_FIELDS[groupKey]?.[field] : undefined
+        const stringOptions = stringDatasetName ? getMetaStringOptions(metaDatasets, stringDatasetName) : []
+        let control = <JsonFieldInput value={value} onChange={next => onUpdate(record.key, field, next)} />
+        const isSeidField = field === 'seid' && seidGroupKey !== null
+
+        if (isSeidField) {
+            const count = Array.isArray(value) ? value.length : 0
+            control = (
+                <button
+                    type="button"
+                    disabled={!onUpdateSeidData}
+                    onClick={() => setSeidEditorOpen(true)}
+                    className="flex w-full items-center justify-between rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <span>{'\u7f16\u8f91 Seid'}</span>
+                    <span className="text-xs text-ink-subtle">
+                        {count} {'\u9879'}
+                    </span>
+                </button>
+            )
+        } else if (isAffixField && Array.isArray(value)) {
+            const options = getAffixSelectOptions(affixRecords)
+            control = <AffixSelect value={value} options={options} label={label} onCommit={next => onUpdate(record.key, field, next)} />
+        } else if (isFlagField) {
+            control = <JsonFlagInput value={value} label={label} onChange={next => onUpdate(record.key, field, next)} />
+        } else if (stringOptions.length > 0) {
+            const current = enumValueOf(value)
+            control = (
+                <Select
+                    value={current}
+                    options={stringOptions}
+                    onChange={next => onUpdate(record.key, field, next)}
+                    aria-label={enumAriaLabel(label, stringOptions, current)}
+                    className="w-full"
+                />
+            )
+        } else if (metaOptions.length > 0) {
+            const isArrayValue = Array.isArray(value)
+            control = (
+                <JsonEnumInput
+                    value={value}
+                    options={metaOptions}
+                    label={label}
+                    multiple={isArrayValue}
+                    onSelect={next => {
+                        const option = metaOptions.find(item => item.value === next)
+                        if (!option) return
+                        if (!isArrayValue) {
+                            onUpdate(record.key, field, option.id)
+                            return
+                        }
+                        const values = value as JsonValue[]
+                        const selectedIndex = values.findIndex(item => enumValueOf(item) === next)
+                        const nextValues =
+                            selectedIndex >= 0 ? values.filter((_, itemIndex) => itemIndex !== selectedIndex) : [...values, option.id]
+                        onUpdate(record.key, field, nextValues)
+                    }}
+                />
+            )
+        } else if (groupKey === 'tuJianChunWenBen' && field === 'typenum') {
+            const options = getAffixProjectTypeOptions(metaDatasets)
+            if (options.length > 0) {
+                control = (
+                    <JsonEnumInput
+                        value={value}
+                        options={options}
+                        label={label}
+                        onSelect={next => {
+                            const option = options.find(item => item.value === next)
+                            if (option) {
+                                onUpdate(record.key, 'typenum', option.typeNum)
+                                onUpdate(record.key, 'name1', option.typeName)
+                            }
+                        }}
+                    />
+                )
+            }
+        } else if (groupKey === 'tuJianChunWenBen' && field === 'type') {
+            const options = getAffixTypeOptions(metaDatasets)
+            if (options.length > 0) {
+                control = (
+                    <JsonEnumInput
+                        value={value}
+                        options={options}
+                        label={label}
+                        onSelect={next => {
+                            const option = options.find(item => item.value === next)
+                            if (option) onUpdate(record.key, 'type', option.typeId)
+                        }}
+                    />
+                )
+            }
+        }
+        return control
+    }
+
+    function renderIconPreview() {
+        if (!record || !iconPath) return null
+        const title = typeof record.data.name === 'string' ? record.data.name : String(record.key)
+        return <AssetIcon path={iconPath} resolve={readAsset} title={title} />
+    }
+
+    function renderMovedIconField() {
+        if (!record || !iconField) return null
+        const label = groupKey ? translateField(groupKey, iconField) : iconField
+        return (
+            <div className="mt-3">
+                <div className="mb-1.5">
+                    <span className="block text-sm font-medium text-ink-soft">{label}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">{renderControl(iconField)}</div>
+                    {renderIconPreview()}
+                </div>
+            </div>
+        )
+    }
 
     return (
-        <section className="flex w-96 shrink-0 flex-col overflow-hidden border-l border-line bg-panel">
-            <div className="shrink-0 border-b border-line px-3 py-2">
-                <h2 className="text-sm font-medium text-ink-muted">JSON 编辑</h2>
-            </div>
-            <ScrollArea className="flex-1" viewportClassName="h-full">
-                {record ? (
-                    <div className="space-y-4 p-3">
-                        {fields.map(field => {
-                            const label = groupKey ? translateField(groupKey, field) : field
-                            const value = record.data[field]
-                            const isAffixField =
-                                groupKey !== null &&
-                                (groupKey === 'buff' || groupKey === 'item' || groupKey === 'skill' || groupKey === 'shenTong') &&
-                                AFFIX_FIELDS.has(field)
-                            const isFlagField = groupKey !== null && (BOOL_NUMBER_FIELDS[groupKey] ?? []).includes(field)
-                            let control = (
-                                <JsonFieldInput
-                                    key={`${record.key}-${field}`}
-                                    value={value}
-                                    onChange={next => onUpdate(record.key, field, next)}
-                                />
-                            )
-                            if (isAffixField && Array.isArray(value)) {
-                                const options = getAffixSelectOptions(affixRecords)
-                                control = (
-                                    <AffixSelect
-                                        key={`${record.key}-${field}`}
-                                        value={value}
-                                        options={options}
-                                        label={label}
-                                        onCommit={next => onUpdate(record.key, field, next)}
-                                    />
-                                )
-                            } else if (isFlagField) {
-                                control = (
-                                    <JsonFlagInput
-                                        key={`${record.key}-${field}`}
-                                        value={value}
-                                        label={label}
-                                        onChange={next => onUpdate(record.key, field, next)}
-                                    />
-                                )
-                            } else if (groupKey === 'tuJianChunWenBen' && field === 'typenum') {
-                                const options = getAffixProjectTypeOptions(metaDatasets)
-                                if (options.length > 0) {
-                                    control = (
-                                        <JsonEnumInput
-                                            key={`${record.key}-${field}`}
-                                            value={value}
-                                            options={options}
-                                            label={label}
-                                            onSelect={next => {
-                                                const option = options.find(item => item.value === next)
-                                                if (option) {
-                                                    onUpdate(record.key, 'typenum', option.typeNum)
-                                                    onUpdate(record.key, 'name1', option.typeName)
-                                                }
-                                            }}
-                                        />
-                                    )
-                                }
-                            } else if (groupKey === 'tuJianChunWenBen' && field === 'type') {
-                                const options = getAffixTypeOptions(metaDatasets)
-                                if (options.length > 0) {
-                                    control = (
-                                        <JsonEnumInput
-                                            key={`${record.key}-${field}`}
-                                            value={value}
-                                            options={options}
-                                            label={label}
-                                            onSelect={next => {
-                                                const option = options.find(item => item.value === next)
-                                                if (option) {
-                                                    onUpdate(record.key, 'type', option.typeId)
-                                                }
-                                            }}
-                                        />
-                                    )
-                                }
-                            }
-                            return (
-                                <div key={field}>
-                                    <div className="mb-1.5">
-                                        <span className="block text-sm font-medium text-ink-soft">{label}</span>
+        <>
+            <section className="flex w-96 shrink-0 flex-col overflow-hidden border-l border-line bg-panel">
+                <div className="shrink-0 border-b border-line px-3 py-2">
+                    <h2 className="text-sm font-medium text-ink-muted">JSON 编辑</h2>
+                </div>
+                <ScrollArea className="flex-1" viewportClassName="h-full">
+                    {record ? (
+                        <div className="space-y-4 p-3">
+                            {fields.map(field => {
+                                const label = groupKey ? translateField(groupKey, field) : field
+                                const isMovedIconField = iconField === field && iconAnchorField !== null
+                                if (isMovedIconField) return null
+                                const showMovedIcon = iconField !== undefined && iconAnchorField === field
+                                const showInlineIcon = iconField === field && iconAnchorField === null
+                                return (
+                                    <div key={field}>
+                                        <div className="mb-1.5">
+                                            <span className="block text-sm font-medium text-ink-soft">{label}</span>
+                                        </div>
+                                        {renderControl(field)}
+                                        {showMovedIcon ? renderMovedIconField() : null}
+                                        {showInlineIcon ? <div className="mt-2">{renderIconPreview()}</div> : null}
                                     </div>
-                                    {control}
-                                </div>
-                            )
-                        })}
-                    </div>
-                ) : (
-                    <div className="flex h-full items-center justify-center p-4 text-sm text-ink-subtle">
-                        在左侧分组中选择一条 JSON 记录后编辑
-                    </div>
-                )}
-            </ScrollArea>
-        </section>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="flex h-full items-center justify-center p-4 text-sm text-ink-subtle">
+                            在左侧分组中选择一条 JSON 记录后编辑
+                        </div>
+                    )}
+                </ScrollArea>
+            </section>
+            {record && seidGroupKey && onUpdateSeidData ? (
+                <SeidEditor
+                    open={seidEditorOpen}
+                    groupKey={seidGroupKey}
+                    record={record}
+                    seidData={seidData}
+                    metaDatasets={metaDatasets}
+                    records={seidRecords}
+                    onClose={() => setSeidEditorOpen(false)}
+                    onUpdateRecord={onUpdate}
+                    onUpdateSeidData={onUpdateSeidData}
+                />
+            ) : null}
+        </>
     )
 }

@@ -6,11 +6,13 @@
     type ProjectData,
     type ProjectMod,
     type ProjectModGroupKey,
+    type ProjectSeidData,
+    type SeidDataKey,
 } from '@baize-next/types'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { open } from '@tauri-apps/plugin-dialog'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { DataTable } from './components/DataTable'
 import { JsonEditor } from './components/JsonEditor'
@@ -32,6 +34,7 @@ import {
     type ProjectFileEntry,
     serializeProjectFiles,
 } from './utils/json'
+import type { SeidDrawerRecords } from './utils/seid'
 
 const PRELOAD_FAILED_LABEL = '\u9884\u52a0\u8f7d\u5931\u8d25'
 const SAVED_TEXT = '\u5df2\u4fdd\u5b58'
@@ -45,6 +48,41 @@ export type SelectionSource =
 function mergeProjectData(base: ProjectData | null, next: ProjectData): ProjectData {
     if (!base) return next
     return { ...base, mods: [...base.mods, ...next.mods] }
+}
+
+function updateModSeidData(
+    mod: ProjectMod,
+    dataKey: SeidDataKey,
+    seidId: string,
+    targetKey: string,
+    value: Record<string, JsonValue> | null
+): ProjectMod {
+    const seidData: ProjectSeidData = { ...(mod.seidData ?? {}) }
+    const files = { ...(seidData[dataKey] ?? {}) }
+    const records = { ...(files[seidId] ?? {}) }
+    if (value === null) {
+        delete records[targetKey]
+    } else {
+        records[targetKey] = value
+    }
+    files[seidId] = records
+    seidData[dataKey] = files
+    return { ...mod, seidData }
+}
+
+function updateProjectSeidData(
+    project: ProjectData | null,
+    modId: string,
+    dataKey: SeidDataKey,
+    seidId: string,
+    targetKey: string,
+    value: Record<string, JsonValue> | null
+): ProjectData | null {
+    if (!project) return project
+    return {
+        ...project,
+        mods: project.mods.map(mod => (mod.id === modId ? updateModSeidData(mod, dataKey, seidId, targetKey, value) : mod)),
+    }
 }
 
 function createEmptyMod(name: string): ProjectMod {
@@ -67,6 +105,8 @@ export default function App() {
     const [bootMode, setBootMode] = useState<PreloadSourceMode>(PreloadSourceMode.Directory)
     const [reloadToken, setReloadToken] = useState(0)
     const [projectRootPath, setProjectRootPath] = useState<string | null>(null)
+    /** 各 mod 的来源根目录，用于解析 Assets 下的图标等资源。 */
+    const [modRootPaths, setModRootPaths] = useState<Record<string, string>>({})
     const [dirty, setDirty] = useState(false)
     const [tip, setTip] = useState<{ message: string; tone: TipTone } | null>(null)
 
@@ -85,6 +125,25 @@ export default function App() {
     const groupKey: ProjectModGroupKey | null = selection?.kind === 'preload' || selection?.kind === 'project' ? selection.groupKey : null
     const selectedRecord = records.find(record => record.key === selectedRecordKey) ?? null
     const affixRecords = [...collectGroupRecords(preloadProject, 'tuJianChunWenBen'), ...collectGroupRecords(project, 'tuJianChunWenBen')]
+    const seidDrawerRecords: SeidDrawerRecords = {
+        buff: [...collectGroupRecords(preloadProject, 'buff'), ...collectGroupRecords(project, 'buff')],
+        skill: [...collectGroupRecords(preloadProject, 'shenTong'), ...collectGroupRecords(project, 'shenTong')],
+        staticSkill: [...collectGroupRecords(preloadProject, 'skill'), ...collectGroupRecords(project, 'skill')],
+        item: [...collectGroupRecords(preloadProject, 'item'), ...collectGroupRecords(project, 'item')],
+    }
+    /** 当前选中 mod 的名称与根目录，用于定位 mod 内的资源文件。 */
+    const currentRootPath = selection?.kind === 'project' ? projectRootPath : selectedMod ? (modRootPaths[selectedMod.id] ?? null) : null
+    const readAsset = useCallback(
+        async (relativePath: string): Promise<string | null> => {
+            if (!currentRootPath) return null
+            try {
+                return await invoke<string>('read_mod_asset', { rootPath: currentRootPath, relativePath })
+            } catch {
+                return null
+            }
+        },
+        [currentRootPath]
+    )
 
     function recordError(source: string, error: unknown): void {
         const message = error instanceof Error ? error.message : String(error)
@@ -147,6 +206,7 @@ export default function App() {
             }
 
             let mergedProject: ProjectData | null = null
+            const preloadRootPaths: Record<string, string> = {}
             for (const entry of preload.mods) {
                 try {
                     const loaded =
@@ -156,6 +216,9 @@ export default function App() {
                                   entry.path,
                                   await invoke<ProjectFileEntry[]>('read_project_files', { rootPath: entry.path })
                               )
+                    for (const mod of loaded.mods) {
+                        preloadRootPaths[mod.id] = entry.path
+                    }
                     mergedProject = mergeProjectData(mergedProject, loaded)
                 } catch (error) {
                     recordError(`mod-preload ${entry.path}`, error)
@@ -164,6 +227,7 @@ export default function App() {
 
             if (cancelled) return
             setMetaDatasets(loadedMeta)
+            setModRootPaths(preloadRootPaths)
             setPreloadProject(mergedProject)
             const firstMod = mergedProject?.mods[0] ?? null
             const firstGroup = firstMod?.groups[0] ?? null
@@ -191,6 +255,7 @@ export default function App() {
             const parsedProject = await parseProjectFromEntries(selected, entries)
             setProject(parsedProject)
             setProjectRootPath(selected)
+            setModRootPaths(Object.fromEntries(parsedProject.mods.map(mod => [mod.id, selected])))
             setDirty(false)
             const firstMod = parsedProject.mods[0] ?? null
             const firstGroup = firstMod?.groups[0] ?? null
@@ -299,6 +364,16 @@ export default function App() {
         )
     }
 
+    function handleUpdateSeidData(dataKey: SeidDataKey, seidId: string, targetKey: string, value: Record<string, JsonValue> | null): void {
+        if (selection?.kind === 'preload') {
+            setPreloadProject(prev => updateProjectSeidData(prev, selection.modId, dataKey, seidId, targetKey, value))
+            return
+        }
+        if (selection?.kind !== 'project') return
+        setDirty(true)
+        setProject(prev => updateProjectSeidData(prev, selection.modId, dataKey, seidId, targetKey, value))
+    }
+
     async function handleSaveProject(): Promise<void> {
         if (!project || !projectRootPath) return
         try {
@@ -395,13 +470,26 @@ export default function App() {
                     onSelectPreloadGroup={(modId, groupKey) => handleSelectGroup('preload', modId, groupKey)}
                     onSelectGroup={(modId, groupKey) => handleSelectGroup('project', modId, groupKey)}
                 />
-                <DataTable groupKey={groupKey} records={records} selectedKey={selectedRecordKey} onSelect={setSelectedRecordKey} />
+                <DataTable
+                    groupKey={groupKey}
+                    records={records}
+                    selectedKey={selectedRecordKey}
+                    onSelect={setSelectedRecordKey}
+                    metaDatasets={metaDatasets}
+                    modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}
+                    readAsset={readAsset}
+                />
                 <JsonEditor
                     groupKey={groupKey}
                     record={selectedRecord}
                     metaDatasets={metaDatasets}
                     affixRecords={affixRecords}
+                    modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}
+                    readAsset={readAsset}
+                    seidData={selectedMod?.seidData ?? {}}
+                    seidRecords={seidDrawerRecords}
                     onUpdate={handleUpdateRecord}
+                    onUpdateSeidData={handleUpdateSeidData}
                 />
             </main>
             {bootError ? (

@@ -9,14 +9,20 @@ import {
     getAffixProjectTypeOptions,
     getAffixSelectOptions,
     getAffixTypeOptions,
+    getGroupEnumOptions,
+    getMetaEnumLabel,
+    getMetaEnumOptions,
+    getMetaStringOptions,
     isRecordMap,
     isRecordObject,
+    META_DATASET_NAMES,
     parseJsonContent,
     parseMetaJsonEntry,
     parseModPreloadJsonEntry,
     parseProjectFromEntries,
     type ProjectFileEntry,
     projectNameFromPath,
+    resolveModIconPath,
     serializeProjectFiles,
 } from './json'
 
@@ -155,6 +161,98 @@ describe('project JSON mapping', () => {
         expect(getAffixTypeOptions(datasets)).toEqual([{ value: '1', label: 'Buff', typeId: 1, typeName: 'Buff' }])
     })
 
+    it('builds meta enum options from preloaded Data/Meta datasets', () => {
+        const datasets = [
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/AttackType.json',
+                content: '[{"Id":0,"Desc":"金"},{"Id":1,"Desc":"木"},{"Id":2,"Desc":"水"}]',
+            }),
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/BuffType.json',
+                content: '[{"TypeID":1,"TypeName":"负面buff"},{"TypeID":2,"TypeName":"正面buff"}]',
+            }),
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/BuffOverlayType.json',
+                content: '[{"ID":0,"Desc":"叠加"},{"ID":1,"Desc":"覆盖"}]',
+            }),
+        ]
+
+        expect(getMetaEnumOptions(datasets, META_DATASET_NAMES.attackType)).toEqual([
+            { value: '0', label: '0 金', id: 0 },
+            { value: '1', label: '1 木', id: 1 },
+            { value: '2', label: '2 水', id: 2 },
+        ])
+        expect(getMetaEnumOptions(datasets, META_DATASET_NAMES.buffType)).toEqual([
+            { value: '1', label: '1 负面buff', id: 1 },
+            { value: '2', label: '2 正面buff', id: 2 },
+        ])
+        expect(getMetaEnumOptions(datasets, META_DATASET_NAMES.buffOverlayType)).toEqual([
+            { value: '0', label: '0 叠加', id: 0 },
+            { value: '1', label: '1 覆盖', id: 1 },
+        ])
+    })
+
+    it('returns no meta enum options when the dataset is missing or malformed', () => {
+        const datasets = [
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/AttackType.json',
+                content: '[{"Id":0,"Desc":"金"},{"Desc":"缺少 Id"},{"Id":1}]',
+            }),
+        ]
+
+        expect(getMetaEnumOptions(datasets, META_DATASET_NAMES.buffType)).toEqual([])
+        expect(getMetaEnumOptions(datasets, META_DATASET_NAMES.attackType)).toEqual([{ value: '0', label: '0 金', id: 0 }])
+    })
+
+    it('reads meta enum labels for cell display', () => {
+        const datasets = [
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/ItemType.json',
+                content: '[{"Id":0,"Desc":"武器"},{"Id":5,"Desc":"丹药"}]',
+            }),
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/ItemPhaseType.json',
+                content: '[{"Id":0,"Desc":"无"},{"Id":1,"Desc":"下品"}]',
+            }),
+        ]
+
+        expect(getMetaEnumLabel(datasets, META_DATASET_NAMES.itemType, 5)).toBe('丹药')
+        expect(getMetaEnumLabel(datasets, META_DATASET_NAMES.itemType, '5')).toBe('丹药')
+        expect(getMetaEnumLabel(datasets, META_DATASET_NAMES.itemType, 99)).toBeNull()
+        expect(getMetaEnumLabel(datasets, META_DATASET_NAMES.itemPhaseType, 1)).toBe('下品')
+        expect(getMetaEnumLabel(datasets, META_DATASET_NAMES.itemShopType, 1)).toBeNull()
+        expect(getMetaEnumLabel(datasets, META_DATASET_NAMES.itemType, '武器')).toBeNull()
+        expect(getMetaEnumLabel(datasets, META_DATASET_NAMES.itemType, [0])).toBeNull()
+    })
+
+    it('maps item and skill fields to their requested meta datasets', () => {
+        const datasets = [
+            parseMetaJsonEntry({ relativePath: 'Data/Meta/ItemGuideType.json', content: '[{"Id":4,"Desc":"丹药"}]' }),
+            parseMetaJsonEntry({ relativePath: 'Data/Meta/ItemPhaseType.json', content: '[{"Id":2,"Desc":"中品"}]' }),
+            parseMetaJsonEntry({ relativePath: 'Data/Meta/SkillQuality.json', content: '[{"Id":3,"Desc":"天阶"}]' }),
+            parseMetaJsonEntry({ relativePath: 'Data/Meta/SkillConsultType.json', content: '[{"Id":7,"Desc":"无法请教"}]' }),
+            parseMetaJsonEntry({ relativePath: 'Data/Meta/GuideType.json', content: '[{"Id":7,"Desc":"功法"}]' }),
+        ]
+
+        expect(getGroupEnumOptions('item', 'TuJianType', datasets)).toEqual([{ value: '4', label: '4 丹药', id: 4 }])
+        expect(getGroupEnumOptions('item', 'typePinJie', datasets)).toEqual([{ value: '2', label: '2 中品', id: 2 }])
+        expect(getGroupEnumOptions('skill', 'typePinJie', datasets)).toEqual([{ value: '2', label: '2 中品', id: 2 }])
+        expect(getGroupEnumOptions('skill', 'Skill_LV', datasets)).toEqual([{ value: '3', label: '3 天阶', id: 3 }])
+        expect(getGroupEnumOptions('skill', 'qingjiaotype', datasets)).toEqual([{ value: '7', label: '7 无法请教', id: 7 }])
+        expect(getGroupEnumOptions('shenTong', 'TuJianType', datasets)).toEqual([{ value: '7', label: '7 功法', id: 7 }])
+    })
+
+    it('builds local boolean enum options with the requested value meaning', () => {
+        expect(getGroupEnumOptions('item', 'NPCCanUse', [])).toEqual([
+            { value: '0', label: '0 否', id: 0 },
+            { value: '1', label: '1 是', id: 1 },
+        ])
+        expect(getGroupEnumOptions('npcType', 'canjiaPaiMai', [])).toEqual([
+            { value: '0', label: '0 是', id: 0 },
+            { value: '1', label: '1 否', id: 1 },
+        ])
+    })
+
     it('builds affix selection options from loaded TuJianChunWenBen records', () => {
         const records: JsonRecord[] = [
             { key: '270000', data: { id: 270000, name1: 'project', typenum: 101, type: 1, name2: 'Affix A', descr: 'desc' } },
@@ -220,5 +318,60 @@ describe('project JSON mapping', () => {
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/BuffJsonData/100.json')
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/TuJianChunWenBen.json')
         expect(writes.find(write => write.relativePath.endsWith('BuffJsonData/100.json'))?.content).toContain('"buffid": 100')
+    })
+})
+
+describe('skill attack script enum', () => {
+    it('builds string enum options from the SkillAttackScriptType meta dataset', () => {
+        const datasets = [
+            parseMetaJsonEntry({
+                relativePath: 'Data/Meta/SkillAttackScriptType.json',
+                content: '[{"Id":"SkillAttack","Desc":"对方"},{"Id":"SkillSelf","Desc":"自身"}]',
+            }),
+        ]
+
+        expect(getMetaStringOptions(datasets, META_DATASET_NAMES.skillAttackScriptType)).toEqual([
+            { value: 'SkillAttack', label: 'SkillAttack 对方' },
+            { value: 'SkillSelf', label: 'SkillSelf 自身' },
+        ])
+    })
+
+    it('returns no options when the dataset is missing or numeric', () => {
+        const datasets = [parseMetaJsonEntry({ relativePath: 'Data/Meta/AttackType.json', content: '[{"Id":0,"Desc":"金"}]' })]
+
+        expect(getMetaStringOptions(datasets, META_DATASET_NAMES.skillAttackScriptType)).toEqual([])
+        expect(getMetaStringOptions(datasets, META_DATASET_NAMES.attackType)).toEqual([])
+    })
+})
+
+describe('mod icon path resolution', () => {
+    it('resolves id based icons when the icon field is zero', () => {
+        expect(resolveModIconPath('modDemo', 'buff', { buffid: 100, BuffIcon: 0 })).toBe('modDemo/Assets/100.png')
+        expect(resolveModIconPath('modDemo', 'item', { id: 7, ItemIcon: 0 })).toBe('modDemo/Assets/7.png')
+    })
+
+    it('uses Skill_ID for skill and shenTong icons', () => {
+        expect(resolveModIconPath('modDemo', 'shenTong', { id: 1, Skill_ID: 5, icon: 42 })).toBe('modDemo/Assets/5.png')
+        expect(resolveModIconPath('modDemo', 'skill', { id: 3, Skill_ID: 9, icon: 0 })).toBe('modDemo/Assets/9.png')
+    })
+
+    it('falls back to common identifier fields for the zero case', () => {
+        expect(resolveModIconPath('modDemo', 'buff', { buffid: 5, BuffIcon: 0 })).toBe('modDemo/Assets/5.png')
+        expect(resolveModIconPath('modDemo', 'shenTong', { id: 5, icon: 0 })).toBeNull()
+    })
+
+    it('supports mod directories nested inside the project and normalizes separators', () => {
+        expect(resolveModIconPath('plugins/Next/_/modDemo', 'item', { id: 7, ItemIcon: 0 })).toBe('plugins/Next/_/modDemo/Assets/7.png')
+        expect(resolveModIconPath('plugins\\Next\\_\\modDemo\\', 'item', { id: 7, ItemIcon: 0 })).toBe(
+            'plugins/Next/_/modDemo/Assets/7.png'
+        )
+    })
+
+    it('returns null for unknown groups or invalid icon values', () => {
+        expect(resolveModIconPath('modDemo', 'config', { icon: 0 })).toBeNull()
+        expect(resolveModIconPath('modDemo', 'buff', { buffid: 1 })).toBeNull()
+        expect(resolveModIconPath('modDemo', 'buff', { buffid: 1, BuffIcon: 'x' })).toBeNull()
+        expect(resolveModIconPath('modDemo', null, { buffid: 1, BuffIcon: 0 })).toBeNull()
+        expect(resolveModIconPath('   ', 'buff', { buffid: 1, BuffIcon: 0 })).toBeNull()
     })
 })

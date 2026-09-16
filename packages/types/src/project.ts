@@ -28,6 +28,15 @@ export interface JsonDataset {
     records: JsonRecord[]
 }
 
+/** Seid data category used by *SeidJsonData directories. */
+export type SeidDataKey = 'buff' | 'skill' | 'staticSkill' | 'itemUse' | 'itemEquip'
+
+/** One Seid file: Seid ID -> target record ID -> property values. */
+export type SeidFileData = Record<string, Record<string, Record<string, JsonValue>>>
+
+/** Seid parameter data stored by a mod. */
+export type ProjectSeidData = Partial<Record<SeidDataKey, SeidFileData>>
+
 /** mod 下可识别的数据分组键。 */
 export type ProjectModGroupKey = 'config' | 'buff' | 'item' | 'skill' | 'shenTong' | 'npcType' | 'npcWuDao' | 'tuJianChunWenBen' | 'preload'
 
@@ -47,6 +56,10 @@ export interface ProjectMod {
     id: string
     /** mod 文件夹名，例如 modXXX。 */
     name: string
+    /** mod 文件夹相对项目根目录的路径（以 / 分隔），仅项目解析时填充。 */
+    directory?: string
+    /** Seid parameter data grouped by Buff/Skill/StaticSkill/ItemUse/ItemEquip. */
+    seidData?: ProjectSeidData
     /** mod 下的数据分组。 */
     groups: ProjectModGroup[]
 }

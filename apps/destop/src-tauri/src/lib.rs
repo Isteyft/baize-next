@@ -97,6 +97,67 @@ fn write_project_file(root_path: String, relative_path: String, content: String)
 }
 
 
+/// 读取项目内的 mod 资源图片并编码为 data URL，供前端直接展示图标。
+#[tauri::command]
+fn read_mod_asset(root_path: String, relative_path: String) -> Result<String, String> {
+    let root = Path::new(&root_path);
+    if !root.is_dir() {
+        return Err("Project root is not a directory".into());
+    }
+    let root = root.canonicalize().map_err(|error| error.to_string())?;
+    let relative = Path::new(&relative_path);
+    if relative.is_absolute() {
+        return Err("Relative path is required".into());
+    }
+    let target = root.join(relative).canonicalize().map_err(|error| error.to_string())?;
+    if !target.starts_with(&root) {
+        return Err("Target path escapes the project root".into());
+    }
+    if !target.is_file() {
+        return Err("Asset file does not exist".into());
+    }
+    let bytes = std::fs::read(&target).map_err(|error| error.to_string())?;
+    let mime = match target
+        .extension()
+        .map(|ext| ext.to_string_lossy().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        Some("gif") => "image/gif",
+        Some("bmp") => "image/bmp",
+        Some("svg") => "image/svg+xml",
+        _ => "application/octet-stream",
+    };
+    Ok(format!("data:{};base64,{}", mime, base64_encode(&bytes)))
+}
+
+/// 以标准字母表对字节进行 base64 编码，避免额外依赖。
+fn base64_encode(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        output.push(ALPHABET[((triple >> 18) & 0x3f) as usize] as char);
+        output.push(ALPHABET[((triple >> 12) & 0x3f) as usize] as char);
+        if chunk.len() > 1 {
+            output.push(ALPHABET[((triple >> 6) & 0x3f) as usize] as char);
+        } else {
+            output.push('=');
+        }
+        if chunk.len() > 2 {
+            output.push(ALPHABET[(triple & 0x3f) as usize] as char);
+        } else {
+            output.push('=');
+        }
+    }
+    output
+}
+
 fn error_log_path() -> Result<std::path::PathBuf, String> {
     std::env::current_dir()
         .map(|dir| dir.join("error.log"))
@@ -136,6 +197,7 @@ pub fn run() {
             read_project_files,
             read_json_file,
             write_project_file,
+            read_mod_asset,
             reset_error_log,
             append_error_log,
             read_error_log

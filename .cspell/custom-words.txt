@@ -36,3 +36,6 @@ zhong
 zhen
 Chun
 typenum
+staticskill
+skillid
+panduan

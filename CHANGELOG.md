@@ -4,6 +4,44 @@
 
 ## [2026-09-15]
 
+-   feat(destop): item 分组的 type/quality/typePinJie/ShopType 字段接入 Data/Meta 的 ItemType/ItemQualityType/ItemPhaseType/ItemShopType 枚举下拉。
+-   feat(destop): 新增 getMetaEnumLabel，数据表格中上述枚举字段按“描述(数值)”展示，未匹配到描述时回退为原值。
+-   refactor(destop): getMetaEnumOptions 改为复用 getMetaEnumRawOptions，统一数值型 Meta 枚举的解析入口。
+-   feat(i18n): item 的 quality/type/typePinJie 文案改为物品品阶、物品类型与物品品阶阶段。
+-   test(destop): 补充 Meta 枚举描述查询与 item 枚举下拉的 Vitest 用例。
+
+## [2026-09-16]
+
+-   feat(destop): Seid 增加改为可搜索的表格弹窗，并支持已添加 Seid 上移、下移调整数组顺序。
+
+-   feat(destop): 新增 Seid 编辑弹窗，支持按 Buff/Skill/StaticSkill/Item 类型增删 Seid 并填写参数。
+-   feat(destop): 解析并保存 BuffSeidJsonData、SkillSeidJsonData、StaticSkillSeidJsonData、ItemsSeidJsonData、EquipSeidJsonData。
+-   feat(destop): Seid 属性的 SpecialDrawer 接入 Buff/Skill/StaticSkill/Item/ElementType 等选项源，数组型选项支持多选。
+-   fix(destop): 修正 mod\_ 前缀在项目保存路径中重复拼接的问题。
+-   test(destop): 补充 Seid Meta、Drawer、数据加载保存、弹窗增删与多选用例。
+-   fix(destop): 修正 item 的 TuJianType/typePinJie、skill 与 shenTong 的 typePinJie/Skill_LV/qingjiaotype 枚举数据源映射。
+-   feat(destop): NPCCanUse 与 canjiaPaiMai 改为本地是否枚举下拉，并明确 0/1 的业务含义。
+-   fix(destop): 功法与神通图标统一按 Skill_ID 命名加载，表格与编辑器均展示实际图片而非路径。
+-   test(destop): 补充上述字段映射、是否枚举及 Skill_ID 图标规则用例。
+-   feat(destop): skill 分组的 script 字段改为 SkillAttackScriptType 字符串枚举下拉。
+-   feat(destop): 新增 getMetaStringOptions，支持 Id/ID 为字符串的 Meta 枚举解析。
+-   feat(destop): 新增 GROUP_ICON_FIELDS 与 resolveModIconPath，按 modxxx/Assets 规则解析图标路径：填写值为 0 时取编号.png，否则取图标值.png。
+-   feat(destop): buff/item/skill/staticskill 的图标字段统一移动到编号字段下方，并在编辑器内展示图标预览。
+-   feat(destop): Tauri 新增 read_mod_asset 命令，读取 mod 资源图片并编码为 data URL 供前端展示。
+-   feat(types): ProjectMod 新增 directory 字段，记录 mod 文件夹相对项目根目录的路径。
+-   feat(destop): skill 分组的老词缀字段默认隐藏，编辑器与表格均不再展示。
+-   fix(destop): 补齐 DataTable 的 metaDatasets 传递与 DataRow 属性，修复表格无法编译的问题。
+-   test(destop): 补充字符串枚举解析、图标路径解析、script 下拉、老词缀隐藏、图标位置与预览用例。
+-   feat(destop): buff 的 bufftype/BuffType/trigger/removeTrigger、skill 与 shenTong 的 AttackType 等字段改为 Meta 枚举下拉选择。
+-   feat(destop): 新增 getMetaEnumOptions 通用 Meta 枚举解析，兼容 Id/ID/TypeID/TypeNum 与 Desc/TypeName 两套字段命名。
+-   feat(destop): 数组型枚举字段按项下拉，重复选择同一选项即从数组中移除该值。
+-   feat(i18n): isHide/ShowOnlyOne 文案统一为“0否，1是”。
+-   test(destop): 补充 Meta 枚举解析与编辑器枚举下拉、数组枚举增删测试。
+-   feat(destop): 数据表格改为按分组自适应列，仅保留 id、名称与介绍等关键字段，减少列数臃肿。
+-   feat(destop): 数据表格右上角新增搜索框，支持按 id、名称与介绍关键词过滤，并在无匹配时给出空态提示。
+-   feat(destop): 搜索输入使用延迟值与预缓存搜索索引，避免大数据量下输入卡顿。
+-   test(destop): 补充表格列筛选与关键词搜索、空态提示、搜索清空回复的 Vitest 用例。
+
 -   perf(destop): 数据表格改为固定行高虚拟滚动，仅渲染可视行与缓冲行，缓解上千行数据切换分组时的卡顿。
 -   perf(destop): 表格字段收集与排序改为 useMemo 缓存并预计算排序键，选中行改用 memo 行组件，减少重复渲染。
 -   feat(destop): ScrollArea 支持外部传入 viewportRef，便于调用方读取滚动位置。
