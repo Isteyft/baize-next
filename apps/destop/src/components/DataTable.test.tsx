@@ -137,6 +137,42 @@ describe('DataTable', () => {
         })
     })
 
+    it('batch generates NPC WuDao levels 1-15 with the lv field', () => {
+        const onCreateRecord = vi.fn()
+        render(
+            <DataTable
+                groupKey="npcWuDao"
+                records={[
+                    {
+                        key: '800000',
+                        data: { id: 800000, Type: 61, lv: 1, wudaoID: [10] },
+                    },
+                ]}
+                selectedKey="800000"
+                selectedKeys={['800000']}
+                onSelect={vi.fn()}
+                onCreateRecord={onCreateRecord}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('800000'))
+        fireEvent.click(screen.getByRole('menuitem', { name: '\u6279\u91cf\u751f\u6210' }))
+
+        expect(onCreateRecord).toHaveBeenCalledTimes(15)
+        expect(onCreateRecord).toHaveBeenNthCalledWith(1, '800001', {
+            id: 800001,
+            Type: 61,
+            lv: 1,
+            wudaoID: [10],
+        })
+        expect(onCreateRecord).toHaveBeenNthCalledWith(15, '800015', {
+            id: 800015,
+            Type: 61,
+            lv: 15,
+            wudaoID: [10],
+        })
+    })
+
     it('stops NPC batch generation and shows an ID conflict dialog when a serial number already exists', () => {
         const onCreateRecord = vi.fn()
         render(

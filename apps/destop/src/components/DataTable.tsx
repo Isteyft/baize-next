@@ -114,6 +114,8 @@ function parseRecordId(value: string): string | number {
     return Number.isSafeInteger(parsed) ? parsed : value
 }
 
+export type NpcBatchRealmField = 'Level' | 'lv'
+
 export interface NpcBatchGenerationResult {
     records: JsonRecord[]
     conflictKey: string | null
@@ -121,9 +123,13 @@ export interface NpcBatchGenerationResult {
 
 /**
  * 以指定 NPC 记录为模板，生成境界 1-15 的批量记录。
- * 流水号从模板 ID 后连续递增，除 id 与 Level 外的字段保持不变。
+ * 流水号从模板 ID 后连续递增，除 id 与境界字段外的字段保持不变。
  */
-export function buildNpcBatchRecords(records: JsonRecord[], templateKey: string): NpcBatchGenerationResult {
+export function buildNpcBatchRecords(
+    records: JsonRecord[],
+    templateKey: string,
+    realmField: NpcBatchRealmField = 'Level'
+): NpcBatchGenerationResult {
     const template = records.find(record => record.key === templateKey)
     const templateId = Number(template?.data.id)
     if (!template || !Number.isSafeInteger(templateId)) {
@@ -150,7 +156,7 @@ export function buildNpcBatchRecords(records: JsonRecord[], templateKey: string)
             data: {
                 ...template.data,
                 id,
-                Level: level,
+                [realmField]: level,
             },
         })
     }
@@ -371,6 +377,7 @@ export function DataTable({
     const [idConflict, setIdConflict] = useState<string | null>(null)
 
     const primaryField = groupKey ? (PRIMARY_FIELDS[groupKey] ?? null) : null
+    const batchRealmField: NpcBatchRealmField | null = groupKey === 'npcType' ? 'Level' : groupKey === 'npcWuDao' ? 'lv' : null
     const currentSelectedKeys = selectedKeys ?? (selectedKey ? [selectedKey] : [])
     const selectedKeySet = useMemo(() => new Set(currentSelectedKeys), [currentSelectedKeys])
     const wuDaoTypeOptions = useMemo(() => getRecordSelectOptions(wuDaoTypeRecords), [wuDaoTypeRecords])
@@ -539,9 +546,9 @@ export function DataTable({
     }
 
     function handleBatchGenerate(templateKey: string): void {
-        if (groupKey !== 'npcType' || !onCreateRecord) return
+        if (!batchRealmField || !onCreateRecord) return
         setContextMenu(null)
-        const result = buildNpcBatchRecords(records, templateKey)
+        const result = buildNpcBatchRecords(records, templateKey, batchRealmField)
         for (const record of result.records) {
             onCreateRecord(record.key, record.data)
         }
@@ -661,7 +668,7 @@ export function DataTable({
                         style={{ left: contextMenu.x, top: contextMenu.y }}
                         className="fixed z-[91] min-w-32 overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-xl"
                     >
-                        {groupKey === 'npcType' && onCreateRecord && contextMenu.keys.length === 1 ? (
+                        {batchRealmField && onCreateRecord && contextMenu.keys.length === 1 ? (
                             <button
                                 type="button"
                                 role="menuitem"
