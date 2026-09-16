@@ -114,6 +114,50 @@ function parseRecordId(value: string): string | number {
     return Number.isSafeInteger(parsed) ? parsed : value
 }
 
+export interface NpcBatchGenerationResult {
+    records: JsonRecord[]
+    conflictKey: string | null
+}
+
+/**
+ * 以指定 NPC 记录为模板，生成境界 1-15 的批量记录。
+ * 流水号从模板 ID 后连续递增，除 id 与 Level 外的字段保持不变。
+ */
+export function buildNpcBatchRecords(records: JsonRecord[], templateKey: string): NpcBatchGenerationResult {
+    const template = records.find(record => record.key === templateKey)
+    const templateId = Number(template?.data.id)
+    if (!template || !Number.isSafeInteger(templateId)) {
+        return { records: [], conflictKey: template?.key ?? templateKey }
+    }
+
+    const existingKeys = new Set(records.map(record => record.key))
+    const existingIds = new Set(
+        records
+            .map(record => record.data.id)
+            .filter((value): value is string | number => typeof value === 'string' || typeof value === 'number')
+            .map(String)
+    )
+    const generatedRecords: JsonRecord[] = []
+
+    for (let level = 1; level <= 15; level += 1) {
+        const id = templateId + level
+        const key = String(id)
+        if (existingKeys.has(key) || existingIds.has(key)) {
+            return { records: generatedRecords, conflictKey: key }
+        }
+        generatedRecords.push({
+            key,
+            data: {
+                ...template.data,
+                id,
+                Level: level,
+            },
+        })
+    }
+
+    return { records: generatedRecords, conflictKey: null }
+}
+
 /** 将一个悟道类型值转换成悟道类型表中的中文名称。 */
 function formatWuDaoTypeValue(value: JsonValue, options: RecordSelectOption[]): string {
     const values = Array.isArray(value) ? value : [value]
@@ -324,6 +368,7 @@ export function DataTable({
     const [addId, setAddId] = useState('')
     const [addError, setAddError] = useState('')
     const [deleteKeys, setDeleteKeys] = useState<string[] | null>(null)
+    const [idConflict, setIdConflict] = useState<string | null>(null)
 
     const primaryField = groupKey ? (PRIMARY_FIELDS[groupKey] ?? null) : null
     const currentSelectedKeys = selectedKeys ?? (selectedKey ? [selectedKey] : [])
@@ -401,6 +446,7 @@ export function DataTable({
         setAddId('')
         setAddError('')
         setDeleteKeys(null)
+        setIdConflict(null)
     }, [groupKey])
 
     function commitSelection(keys: string[], activeKey: string | null): void {
@@ -463,7 +509,7 @@ export function DataTable({
         }
         setContextMenu({
             x: Math.max(8, Math.min(event.clientX, window.innerWidth - 152)),
-            y: Math.max(8, Math.min(event.clientY, window.innerHeight - 52)),
+            y: Math.max(8, Math.min(event.clientY, window.innerHeight - 84)),
             keys,
         })
     }
@@ -490,6 +536,16 @@ export function DataTable({
         setAddOpen(false)
         setAddId('')
         setAddError('')
+    }
+
+    function handleBatchGenerate(templateKey: string): void {
+        if (groupKey !== 'npcType' || !onCreateRecord) return
+        setContextMenu(null)
+        const result = buildNpcBatchRecords(records, templateKey)
+        for (const record of result.records) {
+            onCreateRecord(record.key, record.data)
+        }
+        setIdConflict(result.conflictKey)
     }
 
     function confirmDelete(): void {
@@ -605,6 +661,16 @@ export function DataTable({
                         style={{ left: contextMenu.x, top: contextMenu.y }}
                         className="fixed z-[91] min-w-32 overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-xl"
                     >
+                        {groupKey === 'npcType' && onCreateRecord && contextMenu.keys.length === 1 ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => handleBatchGenerate(contextMenu.keys[0]!)}
+                                className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
+                            >
+                                批量生成
+                            </button>
+                        ) : null}
                         <button
                             type="button"
                             role="menuitem"
@@ -668,6 +734,38 @@ export function DataTable({
                             </button>
                         </footer>
                     </form>
+                </div>
+            ) : null}
+
+            {idConflict ? (
+                <div
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setIdConflict(null)
+                    }}
+                >
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="ID 冲突"
+                        className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="border-b border-line px-5 py-4">
+                            <h3 className="text-base font-semibold text-ink">ID 冲突</h3>
+                        </header>
+                        <p className="px-5 py-5 text-sm text-ink-soft">ID {idConflict} 已存在，批量生成已停止。</p>
+                        <footer className="flex justify-end border-t border-line px-5 py-3">
+                            <button
+                                type="button"
+                                autoFocus
+                                onClick={() => setIdConflict(null)}
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                知道了
+                            </button>
+                        </footer>
+                    </section>
                 </div>
             ) : null}
 

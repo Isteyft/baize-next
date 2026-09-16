@@ -2,7 +2,7 @@ import type { JsonDataset } from '@baize-next/types'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { DataTable, formatCellText, getVisibleRange } from './DataTable'
+import { buildNpcBatchRecords, DataTable, formatCellText, getVisibleRange } from './DataTable'
 
 /** 构造长表测试数据：由于表格对未配置分组只保留一列，这里固定使用 buff 分组的 name 列。 */
 function createRecords(count: number) {
@@ -97,6 +97,85 @@ describe('DataTable', () => {
         fireEvent.click(screen.getByRole('button', { name: '确定' }))
         expect(screen.getByText('该 ID 已存在')).toBeTruthy()
         expect(onCreateRecord).not.toHaveBeenCalled()
+    })
+
+    it('batch generates NPC levels 1-15 from the selected template', () => {
+        const onCreateRecord = vi.fn()
+        render(
+            <DataTable
+                groupKey="npcType"
+                records={[
+                    {
+                        key: '700000',
+                        data: { id: 700000, Type: 7000, Level: 1, LingGen: [20], skills: [1] },
+                    },
+                ]}
+                selectedKey="700000"
+                selectedKeys={['700000']}
+                onSelect={vi.fn()}
+                onCreateRecord={onCreateRecord}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('700000'))
+        fireEvent.click(screen.getByRole('menuitem', { name: '\u6279\u91cf\u751f\u6210' }))
+
+        expect(onCreateRecord).toHaveBeenCalledTimes(15)
+        expect(onCreateRecord).toHaveBeenNthCalledWith(1, '700001', {
+            id: 700001,
+            Type: 7000,
+            Level: 1,
+            LingGen: [20],
+            skills: [1],
+        })
+        expect(onCreateRecord).toHaveBeenNthCalledWith(15, '700015', {
+            id: 700015,
+            Type: 7000,
+            Level: 15,
+            LingGen: [20],
+            skills: [1],
+        })
+    })
+
+    it('stops NPC batch generation and shows an ID conflict dialog when a serial number already exists', () => {
+        const onCreateRecord = vi.fn()
+        render(
+            <DataTable
+                groupKey="npcType"
+                records={[
+                    { key: '700000', data: { id: 700000, Type: 7000, Level: 1 } },
+                    { key: '700003', data: { id: 700003, Type: 9999, Level: 4 } },
+                ]}
+                selectedKey="700000"
+                selectedKeys={['700000']}
+                onSelect={vi.fn()}
+                onCreateRecord={onCreateRecord}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('700000'))
+        fireEvent.click(screen.getByRole('menuitem', { name: '\u6279\u91cf\u751f\u6210' }))
+
+        expect(onCreateRecord).toHaveBeenCalledTimes(2)
+        expect(onCreateRecord).toHaveBeenLastCalledWith('700002', { id: 700002, Type: 7000, Level: 2 })
+        expect(screen.getByRole('dialog', { name: 'ID \u51b2\u7a81' })).toBeTruthy()
+        expect(screen.getByText('ID 700003 \u5df2\u5b58\u5728\uff0c\u6279\u91cf\u751f\u6210\u5df2\u505c\u6b62\u3002')).toBeTruthy()
+    })
+
+    it('builds NPC batch records against record keys and ID fields', () => {
+        const result = buildNpcBatchRecords(
+            [
+                { key: '100', data: { id: 100, Level: 1, name: 'template' } },
+                { key: 'existing', data: { id: '103', Level: 4, name: 'existing' } },
+            ],
+            '100'
+        )
+
+        expect(result.conflictKey).toBe('103')
+        expect(result.records).toEqual([
+            { key: '101', data: { id: 101, Level: 1, name: 'template' } },
+            { key: '102', data: { id: 102, Level: 2, name: 'template' } },
+        ])
     })
 
     it('supports shift selection across the visible rows', () => {
