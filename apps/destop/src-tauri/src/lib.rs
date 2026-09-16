@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,25 +75,47 @@ fn read_json_file(path: String) -> Result<ProjectFileEntry, String> {
     Ok(ProjectFileEntry { relative_path, content })
 }
 
-/// 将 JSON 文本写回项目内的相对路径，父目录不存在时自动创建。
-#[tauri::command]
-fn write_project_file(root_path: String, relative_path: String, content: String) -> Result<(), String> {
-    let root = Path::new(&root_path);
+fn resolve_project_target(root_path: &str, relative_path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let root = Path::new(root_path);
     if !root.is_dir() {
         return Err("Project root is not a directory".into());
     }
-    let relative = Path::new(&relative_path);
-    if relative.is_absolute() {
-        return Err("Relative path is required".into());
+    let relative = Path::new(relative_path);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
+    {
+        return Err("Target path escapes the project root".into());
     }
     let target = root.join(relative);
     if !target.starts_with(root) {
         return Err("Target path escapes the project root".into());
     }
+    Ok((root.to_path_buf(), target))
+}
+
+/// 将 JSON 文本写回项目内的相对路径，父目录不存在时自动创建。
+#[tauri::command]
+fn write_project_file(root_path: String, relative_path: String, content: String) -> Result<(), String> {
+    let (_root, target) = resolve_project_target(&root_path, &relative_path)?;
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     std::fs::write(&target, content).map_err(|error| error.to_string())
+}
+
+/// 删除项目内的相对 JSON 文件；文件已不存在时视为成功。
+#[tauri::command]
+fn delete_project_file(root_path: String, relative_path: String) -> Result<(), String> {
+    let (_root, target) = resolve_project_target(&root_path, &relative_path)?;
+    if target.exists() {
+        if !target.is_file() {
+            return Err("Target path is not a file".into());
+        }
+        std::fs::remove_file(&target).map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 
@@ -197,6 +219,7 @@ pub fn run() {
             read_project_files,
             read_json_file,
             write_project_file,
+            delete_project_file,
             read_mod_asset,
             reset_error_log,
             append_error_log,

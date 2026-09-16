@@ -25,6 +25,7 @@ import {
     type ProjectFileEntry,
     projectNameFromPath,
     resolveModIconPath,
+    resolveProjectRecordRelativePath,
     serializeProjectFiles,
 } from './json'
 
@@ -355,6 +356,12 @@ describe('project JSON mapping', () => {
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/BuffJsonData/100.json')
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/TuJianChunWenBen.json')
         expect(writes.find(write => write.relativePath.endsWith('BuffJsonData/100.json'))?.content).toContain('"buffid": 100')
+    })
+
+    it('resolves directory record paths for deletion', () => {
+        expect(resolveProjectRecordRelativePath('demo', 'buff', '100')).toBe('plugins/Next/_/mod_demo/Data/BuffJsonData/100.json')
+        expect(resolveProjectRecordRelativePath('demo', 'item', '7')).toBe('plugins/Next/_/mod_demo/Data/ItemJsonData/7.json')
+        expect(resolveProjectRecordRelativePath('demo', 'npcType', '1')).toBeNull()
     })
 })
 

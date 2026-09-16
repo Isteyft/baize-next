@@ -66,6 +66,146 @@ describe('DataTable', () => {
         expect(screen.queryByText('5')).toBeNull()
     })
 
+    it('creates a record with the id entered in the add dialog', () => {
+        const onCreateRecord = vi.fn()
+        render(<DataTable groupKey="item" records={[]} selectedKey={null} onSelect={vi.fn()} onCreateRecord={onCreateRecord} />)
+
+        fireEvent.click(screen.getByRole('button', { name: '增加记录' }))
+        fireEvent.change(screen.getByLabelText('ID'), { target: { value: '42' } })
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+
+        expect(onCreateRecord).toHaveBeenCalledWith('42', { id: 42 })
+    })
+
+    it('rejects an empty or duplicate id in the add dialog', () => {
+        const onCreateRecord = vi.fn()
+        render(
+            <DataTable
+                groupKey="item"
+                records={[{ key: '7', data: { id: 7, name: 'Existing' } }]}
+                selectedKey={null}
+                onSelect={vi.fn()}
+                onCreateRecord={onCreateRecord}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: '增加记录' }))
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+        expect(screen.getByText('请输入 ID')).toBeTruthy()
+
+        fireEvent.change(screen.getByLabelText('ID'), { target: { value: '7' } })
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+        expect(screen.getByText('该 ID 已存在')).toBeTruthy()
+        expect(onCreateRecord).not.toHaveBeenCalled()
+    })
+
+    it('supports shift selection across the visible rows', () => {
+        const onSelectionChange = vi.fn()
+        const onSelect = vi.fn()
+        render(
+            <DataTable
+                groupKey="buff"
+                records={createRecords(4)}
+                selectedKey="1"
+                selectedKeys={['1']}
+                onSelect={onSelect}
+                onSelectionChange={onSelectionChange}
+            />
+        )
+
+        fireEvent.click(screen.getByText('Row3'), { shiftKey: true })
+
+        expect(onSelectionChange).toHaveBeenLastCalledWith(['1', '2', '3'])
+        expect(onSelect).toHaveBeenLastCalledWith('3')
+    })
+
+    it('supports ctrl selection without clearing existing rows', () => {
+        const onSelectionChange = vi.fn()
+        render(
+            <DataTable
+                groupKey="buff"
+                records={createRecords(3)}
+                selectedKey="1"
+                selectedKeys={['1', '3']}
+                onSelect={vi.fn()}
+                onSelectionChange={onSelectionChange}
+            />
+        )
+
+        fireEvent.click(screen.getByText('Row2'), { ctrlKey: true })
+
+        expect(onSelectionChange).toHaveBeenLastCalledWith(['1', '3', '2'])
+    })
+
+    it('does not render a delete button next to the add button', () => {
+        render(
+            <DataTable
+                groupKey="buff"
+                records={createRecords(3)}
+                selectedKey="1"
+                selectedKeys={['1', '3']}
+                onSelect={vi.fn()}
+                onCreateRecord={vi.fn()}
+                onDeleteRecords={vi.fn()}
+            />
+        )
+
+        expect(screen.getByRole('button', { name: '增加记录' })).toBeTruthy()
+        expect(screen.queryByRole('button', { name: '删除已选记录' })).toBeNull()
+    })
+
+    it('opens a row context menu and deletes the selected row', () => {
+        const onDeleteRecords = vi.fn()
+        const onSelectionChange = vi.fn()
+        render(
+            <DataTable
+                groupKey="buff"
+                records={createRecords(3)}
+                selectedKey="1"
+                selectedKeys={['1']}
+                onSelect={vi.fn()}
+                onSelectionChange={onSelectionChange}
+                onDeleteRecords={onDeleteRecords}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('Row2'), { clientX: 20, clientY: 30 })
+        expect(onSelectionChange).toHaveBeenLastCalledWith(['2'])
+        fireEvent.click(screen.getByRole('menuitem', { name: '删除' }))
+        fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
+
+        expect(onDeleteRecords).toHaveBeenCalledWith(['2'])
+    })
+
+    it.each([
+        ['npcType', 'Level', 3, '炼气后期(3)'],
+        ['npcWuDao', 'lv', 7, '金丹初期(7)'],
+    ] as const)('renders the realm as text for %s rows', (groupKey, field, value, expected) => {
+        const metaDatasets: JsonDataset[] = [
+            {
+                id: 'level-type',
+                name: 'LevelType',
+                kind: 'file',
+                records: [
+                    { key: '3', data: { TypeID: 3, Desc: '炼气后期' } },
+                    { key: '7', data: { TypeID: 7, Desc: '金丹初期' } },
+                ],
+            },
+        ]
+        render(
+            <DataTable
+                groupKey={groupKey}
+                records={[{ key: '1', data: { id: 1, Type: 100, [field]: value } }]}
+                selectedKey="1"
+                onSelect={vi.fn()}
+                metaDatasets={metaDatasets}
+            />
+        )
+
+        expect(screen.getByText(expected)).toBeTruthy()
+        expect(screen.queryByRole('button', { name: /境界 1$/ })).toBeNull()
+    })
+
     it('filters rows by id, name or description keyword', () => {
         render(
             <DataTable

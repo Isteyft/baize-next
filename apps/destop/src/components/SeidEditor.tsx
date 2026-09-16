@@ -1,4 +1,4 @@
-﻿import type { JsonDataset, JsonRecord, JsonValue, ProjectSeidData, SeidDataKey } from '@baize-next/types'
+import type { JsonDataset, JsonRecord, JsonValue, ProjectSeidData, SeidDataKey } from '@baize-next/types'
 import { useEffect, useRef, useState } from 'react'
 
 import {
@@ -152,7 +152,8 @@ function SeidArrayInput({ value, onChange }: { value: JsonValue; onChange: (valu
             {values.map((item, index) => (
                 <div key={index} className="flex items-center gap-2">
                     <input
-                        type={useNumber ? 'number' : 'text'}
+                        type="text"
+                        inputMode={useNumber ? 'decimal' : undefined}
                         value={String(item ?? '')}
                         onChange={event => {
                             const next = useNumber ? Number(event.target.value) : event.target.value
@@ -216,8 +217,8 @@ function SeidPropertyInput({
     if (property.type === 'Int' || property.type === 'Float') {
         return (
             <input
-                type="number"
-                step={property.type === 'Float' ? 'any' : '1'}
+                type="text"
+                inputMode={property.type === 'Float' ? 'decimal' : 'numeric'}
                 value={typeof value === 'number' || typeof value === 'string' ? value : 0}
                 onChange={event => {
                     const next = Number(event.target.value)

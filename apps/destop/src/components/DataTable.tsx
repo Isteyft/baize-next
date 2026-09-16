@@ -1,6 +1,16 @@
 import { translateField } from '@baize-next/i18n'
 import type { JsonDataset, JsonRecord, JsonValue, ProjectModGroupKey } from '@baize-next/types'
-import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+    type FormEvent,
+    memo,
+    type MouseEvent as ReactMouseEvent,
+    useDeferredValue,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react'
 
 import {
     collectRecordFields,
@@ -30,8 +40,16 @@ interface DataTableProps {
     records: JsonRecord[]
     /** 当前选中记录的 key。 */
     selectedKey: string | null
-    /** 记录选择回调。 */
-    onSelect: (key: string) => void
+    /** 当前已选记录 key 集合，用于 Ctrl/Shift 多选。 */
+    selectedKeys?: readonly string[]
+    /** 记录选择回调；清空选择时传入 null。 */
+    onSelect: (key: string | null) => void
+    /** 多选集合变化回调。 */
+    onSelectionChange?: (keys: string[]) => void
+    /** 新增具有指定主键的数据条目。 */
+    onCreateRecord?: (key: string, data: Record<string, JsonValue>) => void
+    /** 删除指定记录。 */
+    onDeleteRecords?: (keys: string[]) => void
     /** 已预加载的 meta 数据集，用于把枚举字段渲染为描述文本。 */
     metaDatasets?: JsonDataset[]
     /** 搜索框占位文案，默认按 id/名称/介绍搜索。 */
@@ -54,8 +72,8 @@ const VISIBLE_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     item: ['name', 'desc'],
     skill: ['name', 'descr'],
     shenTong: ['name', 'descr'],
-    npcType: ['Type'],
-    npcWuDao: ['Type'],
+    npcType: ['Type', 'Level'],
+    npcWuDao: ['Type', 'lv'],
     tuJianChunWenBen: ['name2', 'descr'],
 }
 
@@ -80,6 +98,12 @@ const PRIMARY_FIELDS: Partial<Record<ProjectModGroupKey, string>> = {
 const HIDDEN_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     tuJianChunWenBen: ['name1'],
     shenTong: ['Affix'],
+}
+
+function parseRecordId(value: string): string | number {
+    if (!/^-?\d+$/.test(value)) return value
+    const parsed = Number(value)
+    return Number.isSafeInteger(parsed) ? parsed : value
 }
 
 /**
@@ -183,7 +207,8 @@ interface DataRowProps {
     /** 读取 mod 资源并返回可展示的 data URL。 */
     readAsset?: ((relativePath: string) => Promise<string | null>) | undefined
     selected: boolean
-    onSelect: (key: string) => void
+    onSelect: (key: string, event: ReactMouseEvent<HTMLTableRowElement>) => void
+    onContextMenu: (key: string, event: ReactMouseEvent<HTMLTableRowElement>) => void
 }
 
 /** 单行渲染与选中态解耦，滚动或选中变化时仅重绘受影响的行。 */
@@ -199,13 +224,16 @@ const DataRow = memo(function DataRow({
     readAsset,
     selected,
     onSelect,
+    onContextMenu,
 }: DataRowProps) {
     return (
         <tr
-            onClick={() => onSelect(record.key)}
-            className={`cursor-pointer border-b border-line transition-colors ${
-                selected ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-raised'
-            }`}
+            onClick={event => onSelect(record.key, event)}
+            onContextMenu={event => onContextMenu(record.key, event)}
+            className={
+                'cursor-pointer border-b border-line transition-colors ' +
+                (selected ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-raised')
+            }
         >
             {showIconColumn ? (
                 <td className="w-12 whitespace-nowrap px-3 py-2">
@@ -224,15 +252,18 @@ const DataRow = memo(function DataRow({
                         : '-'}
                 </td>
             ) : null}
-            {fields.map(field => (
-                <td key={field} className="max-w-72 truncate px-4 py-2.5">
-                    {record.data[field] === undefined ? (
-                        <span className="text-ink-subtle">—</span>
-                    ) : (
-                        formatCellText(groupKey, field, record.data[field], metaDatasets)
-                    )}
-                </td>
-            ))}
+            {fields.map(field => {
+                const value = record.data[field]
+                return (
+                    <td key={field} className="max-w-72 truncate px-4 py-2.5">
+                        {value === undefined ? (
+                            <span className="text-ink-subtle">—</span>
+                        ) : (
+                            formatCellText(groupKey, field, value, metaDatasets)
+                        )}
+                    </td>
+                )
+            })}
         </tr>
     )
 })
@@ -241,7 +272,11 @@ export function DataTable({
     groupKey,
     records,
     selectedKey,
+    selectedKeys,
     onSelect,
+    onSelectionChange,
+    onCreateRecord,
+    onDeleteRecords,
     metaDatasets = [],
     searchPlaceholder = TABLE_SEARCH_PLACEHOLDER,
     modDirectory = null,
@@ -249,16 +284,22 @@ export function DataTable({
 }: DataTableProps) {
     const viewportRef = useRef<HTMLDivElement | null>(null)
     const frameRef = useRef<number | null>(null)
+    const selectionAnchorRef = useRef<string | null>(selectedKey)
     const prevGroupKeyRef = useRef(groupKey)
     const prevQueryRef = useRef('')
     const [scrollTop, setScrollTop] = useState(0)
     const [viewportHeight, setViewportHeight] = useState(0)
     const [query, setQuery] = useState('')
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; keys: string[] } | null>(null)
+    const [addOpen, setAddOpen] = useState(false)
+    const [addId, setAddId] = useState('')
+    const [addError, setAddError] = useState('')
+    const [deleteKeys, setDeleteKeys] = useState<string[] | null>(null)
 
     const primaryField = groupKey ? (PRIMARY_FIELDS[groupKey] ?? null) : null
-    /** 当前分组是否展示图标列：有图标字段且能定位到 mod 目录时才展示。 */
+    const currentSelectedKeys = selectedKeys ?? (selectedKey ? [selectedKey] : [])
+    const selectedKeySet = useMemo(() => new Set(currentSelectedKeys), [currentSelectedKeys])
     const showIconColumn = Boolean(modDirectory) && groupKey !== null && GROUP_ICON_FIELDS[groupKey] !== undefined
-    /** 记录 key -> 图标相对路径，避免每行重复解析路径。 */
     const iconPaths = useMemo(() => {
         const paths = new Map<string, string | null>()
         for (const record of records) {
@@ -270,7 +311,6 @@ export function DataTable({
         () => primaryField !== null && records.some(record => record.data[primaryField] !== undefined),
         [records, primaryField]
     )
-    /** 仅保留当前分组配置且真实存在的列，避免出现整列空白。 */
     const fields = useMemo(() => {
         const available = new Set(collectRecordFields(records))
         const hiddenFields = groupKey ? (HIDDEN_FIELDS[groupKey] ?? []) : []
@@ -281,16 +321,13 @@ export function DataTable({
         )
     }, [records, groupKey, primaryField])
     const sortedRecords = useMemo(() => sortRecords(records, primaryField), [records, primaryField])
-    /** 搜索索引与排序结果一同缓存，避免每次输入都重建全量字符串。 */
     const searchIndex = useMemo(() => sortedRecords.map(record => searchIndexKey(record, primaryField)), [sortedRecords, primaryField])
-    /** 搜索输入使用延迟值，避免大数据量下每次按键都同步过滤。 */
     const deferredQuery = useDeferredValue(query)
     const filteredRecords = useMemo(() => {
         if (!hasSearchKeyword(deferredQuery)) return sortedRecords
         return sortedRecords.filter((_, index) => matchesSearchQuery(searchIndex[index] ?? '', deferredQuery))
     }, [sortedRecords, searchIndex, deferredQuery])
 
-    /** 视口滚动与尺寸变化均合帧处理，避免滚动过程中频繁触发 React 重渲染。 */
     useEffect(() => {
         const viewport = viewportRef.current
         if (!viewport) return
@@ -316,27 +353,144 @@ export function DataTable({
         }
     }, [])
 
-    /** 切换分组或搜索条件时回到顶部，避免沿用上一个视图的滚动位置。 */
     useLayoutEffect(() => {
-        const changed = prevGroupKeyRef.current !== groupKey || prevQueryRef.current !== deferredQuery
+        const groupChanged = prevGroupKeyRef.current !== groupKey
+        const changed = groupChanged || prevQueryRef.current !== deferredQuery
         if (!changed) return
+        if (groupChanged) selectionAnchorRef.current = selectedKey
         prevGroupKeyRef.current = groupKey
         prevQueryRef.current = deferredQuery
         const viewport = viewportRef.current
         if (viewport) viewport.scrollTop = 0
         setScrollTop(0)
-    }, [groupKey, deferredQuery])
+    }, [groupKey, deferredQuery, selectedKey])
+
+    useEffect(() => {
+        setContextMenu(null)
+        setAddOpen(false)
+        setAddId('')
+        setAddError('')
+        setDeleteKeys(null)
+    }, [groupKey])
+
+    function commitSelection(keys: string[], activeKey: string | null): void {
+        const nextKeys = [...new Set(keys)]
+        onSelectionChange?.(nextKeys)
+        onSelect(activeKey)
+    }
+
+    function handleRowClick(recordKey: string, event: ReactMouseEvent<HTMLTableRowElement>): void {
+        const visibleKeys = filteredRecords.map(record => record.key)
+        if (event.shiftKey) {
+            let anchorKey = selectionAnchorRef.current
+            let anchorIndex = anchorKey ? visibleKeys.indexOf(anchorKey) : -1
+            if (anchorIndex < 0 && selectedKey) {
+                anchorKey = selectedKey
+                anchorIndex = visibleKeys.indexOf(selectedKey)
+            }
+            const targetIndex = visibleKeys.indexOf(recordKey)
+            if (anchorIndex < 0 || targetIndex < 0) {
+                selectionAnchorRef.current = recordKey
+                commitSelection([recordKey], recordKey)
+                return
+            }
+            const start = Math.min(anchorIndex, targetIndex)
+            const end = Math.max(anchorIndex, targetIndex)
+            const range = visibleKeys.slice(start, end + 1)
+            const nextKeys = event.ctrlKey || event.metaKey ? [...new Set([...currentSelectedKeys, ...range])] : range
+            commitSelection(nextKeys, recordKey)
+            return
+        }
+
+        if (event.ctrlKey || event.metaKey) {
+            const nextKeys = new Set(currentSelectedKeys)
+            let activeKey: string | null = recordKey
+            if (nextKeys.has(recordKey)) {
+                nextKeys.delete(recordKey)
+                if (selectedKey === recordKey) {
+                    const remaining = [...nextKeys]
+                    activeKey = remaining[remaining.length - 1] ?? null
+                }
+            } else {
+                nextKeys.add(recordKey)
+            }
+            selectionAnchorRef.current = recordKey
+            commitSelection([...nextKeys], activeKey)
+            return
+        }
+
+        selectionAnchorRef.current = recordKey
+        commitSelection([recordKey], recordKey)
+    }
+
+    function handleRowContextMenu(recordKey: string, event: ReactMouseEvent<HTMLTableRowElement>): void {
+        event.preventDefault()
+        event.stopPropagation()
+        const keys = selectedKeySet.has(recordKey) ? [...selectedKeySet] : [recordKey]
+        if (!selectedKeySet.has(recordKey)) {
+            selectionAnchorRef.current = recordKey
+            commitSelection([recordKey], recordKey)
+        }
+        setContextMenu({
+            x: Math.max(8, Math.min(event.clientX, window.innerWidth - 152)),
+            y: Math.max(8, Math.min(event.clientY, window.innerHeight - 52)),
+            keys,
+        })
+    }
+
+    function handleAddSubmit(event: FormEvent<HTMLFormElement>): void {
+        event.preventDefault()
+        if (!primaryField || !onCreateRecord) return
+        const id = addId.trim()
+        if (!id) {
+            setAddError('请输入 ID')
+            return
+        }
+        const value = parseRecordId(id)
+        const key = String(value)
+        const duplicate = records.some(record => {
+            const current = record.data[primaryField]
+            return record.key === key || (typeof current === 'number' || typeof current === 'string' ? String(current) === key : false)
+        })
+        if (duplicate) {
+            setAddError('该 ID 已存在')
+            return
+        }
+        onCreateRecord(key, { [primaryField]: value })
+        setAddOpen(false)
+        setAddId('')
+        setAddError('')
+    }
+
+    function confirmDelete(): void {
+        if (!deleteKeys || !onDeleteRecords) return
+        onDeleteRecords(deleteKeys)
+        setDeleteKeys(null)
+        setContextMenu(null)
+    }
 
     const { start, end } = getVisibleRange(scrollTop, viewportHeight || FALLBACK_VIEWPORT_HEIGHT, filteredRecords.length)
     const topPadding = start * ROW_HEIGHT
     const bottomPadding = (filteredRecords.length - end) * ROW_HEIGHT
-    const columnCount = fields.length + (hasPrimaryField ? 1 : 0)
-    const totalColumnCount = columnCount + (showIconColumn ? 1 : 0)
-
+    const totalColumnCount = fields.length + (hasPrimaryField ? 1 : 0) + (showIconColumn ? 1 : 0)
     return (
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center gap-3 border-b border-line bg-panel px-3 py-2">
-                <h2 className="shrink-0 text-sm font-medium text-ink-muted">数据表格</h2>
+            <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-3 py-2">
+                {primaryField ? (
+                    <button
+                        type="button"
+                        aria-label="增加记录"
+                        disabled={!onCreateRecord}
+                        onClick={() => {
+                            setAddId('')
+                            setAddError('')
+                            setAddOpen(true)
+                        }}
+                        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        增加
+                    </button>
+                ) : null}
                 <div className="relative ml-auto w-64 max-w-[60%]">
                     <input
                         type="search"
@@ -390,8 +544,9 @@ export function DataTable({
                                     metaDatasets={metaDatasets}
                                     iconPath={iconPaths.get(record.key) ?? null}
                                     readAsset={readAsset}
-                                    selected={record.key === selectedKey}
-                                    onSelect={onSelect}
+                                    selected={selectedKeySet.has(record.key)}
+                                    onSelect={handleRowClick}
+                                    onContextMenu={handleRowContextMenu}
                                 />
                             ))}
                             {bottomPadding > 0 ? (
@@ -403,6 +558,125 @@ export function DataTable({
                     </table>
                 )}
             </ScrollArea>
+
+            {contextMenu ? (
+                <>
+                    <div
+                        className="fixed inset-0 z-[90]"
+                        onMouseDown={() => setContextMenu(null)}
+                        onContextMenu={event => {
+                            event.preventDefault()
+                            setContextMenu(null)
+                        }}
+                    />
+                    <div
+                        role="menu"
+                        style={{ left: contextMenu.x, top: contextMenu.y }}
+                        className="fixed z-[91] min-w-32 overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-xl"
+                    >
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => setDeleteKeys(contextMenu.keys)}
+                            className="flex w-full items-center px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger/10"
+                        >
+                            删除{contextMenu.keys.length > 1 ? ' (' + contextMenu.keys.length + ')' : ''}
+                        </button>
+                    </div>
+                </>
+            ) : null}
+
+            {addOpen ? (
+                <div
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setAddOpen(false)
+                    }}
+                >
+                    <form
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="增加数据条目"
+                        onSubmit={handleAddSubmit}
+                        className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="border-b border-line px-5 py-4">
+                            <h3 className="text-base font-semibold text-ink">增加数据条目</h3>
+                        </header>
+                        <div className="p-5">
+                            <label className="mb-2 block text-sm text-ink-soft" htmlFor="data-table-add-id">
+                                ID
+                            </label>
+                            <input
+                                id="data-table-add-id"
+                                autoFocus
+                                value={addId}
+                                onChange={event => {
+                                    setAddId(event.target.value)
+                                    setAddError('')
+                                }}
+                                className="w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent"
+                                placeholder="请输入 ID"
+                            />
+                            {addError ? <p className="mt-2 text-sm text-danger">{addError}</p> : null}
+                        </div>
+                        <footer className="flex justify-end gap-2 border-t border-line px-5 py-3">
+                            <button
+                                type="button"
+                                onClick={() => setAddOpen(false)}
+                                className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft hover:bg-hover"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="submit"
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                确定
+                            </button>
+                        </footer>
+                    </form>
+                </div>
+            ) : null}
+
+            {deleteKeys ? (
+                <div
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setDeleteKeys(null)
+                    }}
+                >
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="确认删除"
+                        className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="border-b border-line px-5 py-4">
+                            <h3 className="text-base font-semibold text-ink">确认删除</h3>
+                        </header>
+                        <p className="px-5 py-5 text-sm text-ink-soft">确定删除已选中的 {deleteKeys.length} 条记录吗？</p>
+                        <footer className="flex justify-end gap-2 border-t border-line px-5 py-3">
+                            <button
+                                type="button"
+                                onClick={() => setDeleteKeys(null)}
+                                className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft hover:bg-hover"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmDelete}
+                                className="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                            >
+                                确认删除
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            ) : null}
         </section>
     )
 }

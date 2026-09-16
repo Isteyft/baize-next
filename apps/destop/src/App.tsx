@@ -1,4 +1,4 @@
-﻿import {
+import {
     type JsonDataset,
     type JsonRecord,
     type JsonValue,
@@ -32,6 +32,7 @@ import {
     parseProjectFromEntries,
     PROJECT_GROUP_DEFS,
     type ProjectFileEntry,
+    resolveProjectRecordRelativePath,
     serializeProjectFiles,
 } from './utils/json'
 import type { SeidDrawerRecords } from './utils/seid'
@@ -93,18 +94,42 @@ function createEmptyMod(name: string): ProjectMod {
     }
 }
 
+function updateProjectGroupRecords(
+    project: ProjectData | null,
+    modId: string,
+    groupKey: ProjectModGroupKey,
+    updateRecords: (records: JsonRecord[]) => JsonRecord[]
+): ProjectData | null {
+    if (!project) return project
+    return {
+        ...project,
+        mods: project.mods.map(mod =>
+            mod.id === modId
+                ? {
+                      ...mod,
+                      groups: mod.groups.map(group =>
+                          group.key === groupKey ? { ...group, records: updateRecords(group.records) } : group
+                      ),
+                  }
+                : mod
+        ),
+    }
+}
+
 export default function App() {
     const [preloadProject, setPreloadProject] = useState<ProjectData | null>(null)
     const [metaDatasets, setMetaDatasets] = useState<JsonDataset[]>([])
     const [project, setProject] = useState<ProjectData | null>(null)
     const [selection, setSelection] = useState<SelectionSource>(null)
     const [selectedRecordKey, setSelectedRecordKey] = useState<string | null>(null)
+    const [selectedRecordKeys, setSelectedRecordKeys] = useState<string[]>([])
     const [bootPhase, setBootPhase] = useState<'loading' | 'ready' | 'error'>('loading')
     const [bootError, setBootError] = useState<string>('')
     const [bootPath, setBootPath] = useState<string>(DEFAULT_META_PRELOAD_PATH)
     const [bootMode, setBootMode] = useState<PreloadSourceMode>(PreloadSourceMode.Directory)
     const [reloadToken, setReloadToken] = useState(0)
     const [projectRootPath, setProjectRootPath] = useState<string | null>(null)
+    const [pendingDeletedFiles, setPendingDeletedFiles] = useState<string[]>([])
     /** 各 mod 的来源根目录，用于解析 Assets 下的图标等资源。 */
     const [modRootPaths, setModRootPaths] = useState<Record<string, string>>({})
     const [dirty, setDirty] = useState(false)
@@ -187,11 +212,13 @@ export default function App() {
             setBootError('')
             setSelection(null)
             setSelectedRecordKey(null)
+            setSelectedRecordKeys([])
 
             setPreloadProject(null)
             setMetaDatasets([])
             setProject(null)
             setProjectRootPath(null)
+            setPendingDeletedFiles([])
             setDirty(false)
 
             const loadedMeta: JsonDataset[] = []
@@ -234,7 +261,9 @@ export default function App() {
             const firstMod = mergedProject?.mods[0] ?? null
             const firstGroup = firstMod?.groups[0] ?? null
             setSelection(firstMod && firstGroup ? { kind: 'preload', modId: firstMod.id, groupKey: firstGroup.key } : null)
-            setSelectedRecordKey(firstGroup?.records[0]?.key ?? null)
+            const firstRecordKey = firstGroup?.records[0]?.key ?? null
+            setSelectedRecordKey(firstRecordKey)
+            setSelectedRecordKeys(firstRecordKey ? [firstRecordKey] : [])
             setBootPhase('ready')
         }
 
@@ -257,12 +286,15 @@ export default function App() {
             const parsedProject = await parseProjectFromEntries(selected, entries)
             setProject(parsedProject)
             setProjectRootPath(selected)
+            setPendingDeletedFiles([])
             setModRootPaths(Object.fromEntries(parsedProject.mods.map(mod => [mod.id, selected])))
             setDirty(false)
             const firstMod = parsedProject.mods[0] ?? null
             const firstGroup = firstMod?.groups[0] ?? null
             setSelection(firstMod && firstGroup ? { kind: 'project', modId: firstMod.id, groupKey: firstGroup.key } : null)
-            setSelectedRecordKey(firstGroup?.records[0]?.key ?? null)
+            const firstRecordKey = firstGroup?.records[0]?.key ?? null
+            setSelectedRecordKey(firstRecordKey)
+            setSelectedRecordKeys(firstRecordKey ? [firstRecordKey] : [])
         } catch (error) {
             recordError('open-project', error)
         }
@@ -272,7 +304,9 @@ export default function App() {
         const mod = (kind === 'preload' ? preloadProject : project)?.mods.find(item => item.id === modId)
         const group = mod?.groups.find(item => item.key === groupKey)
         setSelection({ kind, modId, groupKey })
-        setSelectedRecordKey(group?.records[0]?.key ?? null)
+        const firstRecordKey = group?.records[0]?.key ?? null
+        setSelectedRecordKey(firstRecordKey)
+        setSelectedRecordKeys(firstRecordKey ? [firstRecordKey] : [])
     }
 
     function handleCreateMod(name: string): void {
@@ -300,7 +334,9 @@ export default function App() {
             const nextMod = remaining[0] ?? null
             const nextGroup = nextMod?.groups[0] ?? null
             setSelection(nextMod && nextGroup ? { kind: 'project', modId: nextMod.id, groupKey: nextGroup.key } : null)
-            setSelectedRecordKey(nextGroup?.records[0]?.key ?? null)
+            const nextRecordKey = nextGroup?.records[0]?.key ?? null
+            setSelectedRecordKey(nextRecordKey)
+            setSelectedRecordKeys(nextRecordKey ? [nextRecordKey] : [])
         }
     }
 
@@ -366,6 +402,60 @@ export default function App() {
         )
     }
 
+    function handleCreateRecord(recordKey: string, data: Record<string, JsonValue>): void {
+        if (!selection) return
+        const nextRecord: JsonRecord = { key: recordKey, data }
+        if (selection.kind === 'preload') {
+            setPreloadProject(prev =>
+                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, records =>
+                    records.some(record => record.key === recordKey) ? records : [...records, nextRecord]
+                )
+            )
+        } else {
+            setDirty(true)
+            setProject(prev =>
+                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, records =>
+                    records.some(record => record.key === recordKey) ? records : [...records, nextRecord]
+                )
+            )
+        }
+        setSelectedRecordKey(recordKey)
+        setSelectedRecordKeys([recordKey])
+    }
+
+    function handleDeleteRecords(recordKeys: string[]): void {
+        if (!selection || recordKeys.length === 0) return
+        const keySet = new Set(recordKeys)
+        const remainingRecords = records.filter(record => !keySet.has(record.key))
+        const nextSelectedRecord =
+            selectedRecordKey && !keySet.has(selectedRecordKey) ? selectedRecordKey : (remainingRecords[0]?.key ?? null)
+        if (selection.kind === 'preload') {
+            setPreloadProject(prev =>
+                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, groupRecords =>
+                    groupRecords.filter(record => !keySet.has(record.key))
+                )
+            )
+        } else {
+            const modName = selectedMod?.name
+            if (modName) {
+                const deletedFiles = recordKeys
+                    .map(recordKey => resolveProjectRecordRelativePath(modName, selection.groupKey, recordKey))
+                    .filter((relativePath): relativePath is string => relativePath !== null)
+                if (deletedFiles.length > 0) {
+                    setPendingDeletedFiles(prev => [...new Set([...prev, ...deletedFiles])])
+                }
+            }
+            setDirty(true)
+            setProject(prev =>
+                updateProjectGroupRecords(prev, selection.modId, selection.groupKey, groupRecords =>
+                    groupRecords.filter(record => !keySet.has(record.key))
+                )
+            )
+        }
+        setSelectedRecordKey(nextSelectedRecord)
+        setSelectedRecordKeys(nextSelectedRecord ? [nextSelectedRecord] : [])
+    }
+
     function handleUpdateSeidData(dataKey: SeidDataKey, seidId: string, targetKey: string, value: Record<string, JsonValue> | null): void {
         if (selection?.kind === 'preload') {
             setPreloadProject(prev => updateProjectSeidData(prev, selection.modId, dataKey, seidId, targetKey, value))
@@ -380,9 +470,12 @@ export default function App() {
         if (!project || !projectRootPath) return
         try {
             const writes = serializeProjectFiles(project)
-            if (writes.length === 0) {
+            if (writes.length === 0 && pendingDeletedFiles.length === 0) {
                 recordError('save-project', new Error('没有可保存的项目数据'))
                 return
+            }
+            for (const relativePath of pendingDeletedFiles) {
+                await invoke('delete_project_file', { rootPath: projectRootPath, relativePath })
             }
             for (const write of writes) {
                 await invoke('write_project_file', {
@@ -391,8 +484,9 @@ export default function App() {
                     content: write.content,
                 })
             }
+            setPendingDeletedFiles([])
             setDirty(false)
-            setTip({ message: `${SAVED_TEXT}（${writes.length} 个文件）`, tone: 'success' })
+            setTip({ message: `${SAVED_TEXT}（${writes.length + pendingDeletedFiles.length} 个文件）`, tone: 'success' })
         } catch (error) {
             recordError('save-project', error)
             setTip({ message: SAVE_FAILED_TEXT, tone: 'error' })
@@ -476,7 +570,11 @@ export default function App() {
                     groupKey={groupKey}
                     records={records}
                     selectedKey={selectedRecordKey}
+                    selectedKeys={selectedRecordKeys}
                     onSelect={setSelectedRecordKey}
+                    onSelectionChange={setSelectedRecordKeys}
+                    onCreateRecord={handleCreateRecord}
+                    onDeleteRecords={handleDeleteRecords}
                     metaDatasets={metaDatasets}
                     modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}
                     readAsset={readAsset}

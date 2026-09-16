@@ -84,6 +84,11 @@ const INVERTED_BOOL_NUMBER_FIELDS: Partial<Record<ProjectModGroupKey, string[]>>
     npcType: ['canjiaPaiMai'],
 }
 
+/** 描述类字段统一使用多行文本输入。 */
+function isDescriptionField(field: string): boolean {
+    return /desc/i.test(field)
+}
+
 /** 字符串型 Meta 枚举字段：分组 -> 字段名 -> 数据集名称。 */
 const META_STRING_FIELDS: Partial<Record<ProjectModGroupKey, Record<string, string>>> = {
     shenTong: {
@@ -197,7 +202,59 @@ function JsonComplexInput({ value, onCommit }: { value: JsonValue; onCommit: (va
     )
 }
 
-function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (value: JsonValue) => void }) {
+function NumericTextInput({
+    value,
+    onChange,
+    className = inputClass,
+}: {
+    value: number
+    onChange: (value: number) => void
+    className?: string
+}) {
+    const [draft, setDraft] = useState(() => String(value))
+
+    useEffect(() => {
+        setDraft(String(value))
+    }, [value])
+
+    function handleChange(next: string): void {
+        setDraft(next)
+        if (next.trim() === '') return
+        const parsed = Number(next)
+        if (Number.isFinite(parsed)) onChange(parsed)
+    }
+
+    function handleBlur(): void {
+        const parsed = Number(draft)
+        if (draft.trim() === '' || !Number.isFinite(parsed)) {
+            setDraft(String(value))
+            return
+        }
+        setDraft(String(parsed))
+        if (parsed !== value) onChange(parsed)
+    }
+
+    return (
+        <input
+            type="text"
+            inputMode="decimal"
+            value={draft}
+            onChange={event => handleChange(event.target.value)}
+            onBlur={handleBlur}
+            className={className}
+        />
+    )
+}
+
+function JsonFieldInput({
+    value,
+    multiline = false,
+    onChange,
+}: {
+    value: JsonValue
+    multiline?: boolean
+    onChange: (value: JsonValue) => void
+}) {
     if (Array.isArray(value)) {
         return <JsonArrayInput value={value} onChange={onChange} />
     }
@@ -205,20 +262,13 @@ function JsonFieldInput({ value, onChange }: { value: JsonValue; onChange: (valu
         return <input type="text" value="null" readOnly className={`${inputClass} opacity-60`} />
     }
     if (typeof value === 'string') {
+        if (multiline) {
+            return <textarea value={value} rows={4} onChange={event => onChange(event.target.value)} className={`${inputClass} resize-y`} />
+        }
         return <input type="text" value={value} onChange={event => onChange(event.target.value)} className={inputClass} />
     }
     if (typeof value === 'number') {
-        return (
-            <input
-                type="number"
-                value={value}
-                onChange={event => {
-                    const parsed = Number(event.target.value)
-                    onChange(Number.isFinite(parsed) ? parsed : 0)
-                }}
-                className={inputClass}
-            />
-        )
+        return <NumericTextInput value={value} onChange={onChange} />
     }
     if (typeof value === 'boolean') {
         return (
@@ -589,7 +639,9 @@ export function JsonEditor({
         const metaOptions = getGroupEnumOptions(groupKey, field, metaDatasets)
         const stringDatasetName = groupKey ? META_STRING_FIELDS[groupKey]?.[field] : undefined
         const stringOptions = stringDatasetName ? getMetaStringOptions(metaDatasets, stringDatasetName) : []
-        let control = <JsonFieldInput value={value} onChange={next => onUpdate(record.key, field, next)} />
+        let control = (
+            <JsonFieldInput value={value} multiline={isDescriptionField(field)} onChange={next => onUpdate(record.key, field, next)} />
+        )
         const isSeidField = field === 'seid' && seidGroupKey !== null
 
         if (isSeidField) {

@@ -4,6 +4,12 @@
 
 ## [2026-09-16]
 
+-   fix(destop): 移除表格工具栏删除按钮，恢复境界文本展示，并将数字输入改为无步进器文本输入、描述字段改为多行文本域。
+-   feat(destop): 数据表格移除标题文字，新增按 ID 创建数据条目的弹窗和增加按钮。
+-   feat(destop): 数据表格支持右键删除、Ctrl 切换多选、Shift 连续多选及批量删除确认。
+-   feat(destop): NPC 类型与 NPC 悟道表格按 LevelType 元数据显示境界文本。
+-   fix(destop): 项目保存时同步删除已移除的目录型记录 JSON 文件，并收紧项目文件路径校验。
+-   test(destop): 补充表格新增、多选、右键删除、境界文本展示与删除路径解析用例。
 -   docs: 修复 CHANGELOG 历史乱码并补齐当前数据编辑变更记录。
 -   feat(destop): 编辑器中的 mod 图标预览保留为 64x64 固定显示区。
 -   feat(destop): NPC 的 skills 按神通 Skill_ID 去重后在表格弹窗中选择，staticSkills 保持多选，yuanying 为单选功法。

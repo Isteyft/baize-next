@@ -462,6 +462,9 @@ export const GROUP_META_ENUM_FIELDS: Partial<Record<ProjectModGroupKey, Record<s
     npcType: {
         Level: META_DATASET_NAMES.levelType,
     },
+    npcWuDao: {
+        lv: META_DATASET_NAMES.levelType,
+    },
 }
 
 /**
@@ -985,6 +988,12 @@ const GROUP_FILE_PATHS: Partial<Record<ProjectModGroupKey, (modName: string, rec
     buff: (modName, recordKey) => `plugins/Next/_/${modDirectoryName(modName)}/Data/BuffJsonData/${recordKey}.json`,
     item: (modName, recordKey) => `plugins/Next/_/${modDirectoryName(modName)}/Data/ItemJsonData/${recordKey}.json`,
     shenTong: (modName, recordKey) => `plugins/Next/_/${modDirectoryName(modName)}/Data/skillJsonData/${recordKey}.json`,
+}
+
+/** 解析目录型分组中单条记录对应的项目相对路径，用于新增、覆盖和删除文件。 */
+export function resolveProjectRecordRelativePath(modName: string, groupKey: ProjectModGroupKey, recordKey: string): string | null {
+    const resolve = GROUP_FILE_PATHS[groupKey]
+    return resolve ? resolve(modName, recordKey) : null
 }
 
 /** 单文件分组的固定路径。 */

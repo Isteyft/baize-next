@@ -14,6 +14,37 @@ describe('JsonEditor', () => {
         expect(onUpdate).toHaveBeenCalledWith('a', 'name', 'beta')
     })
 
+    it('renders all description fields as multiline text fields', () => {
+        const onUpdate = vi.fn()
+        render(
+            <JsonEditor
+                groupKey={null}
+                record={{
+                    key: 'a',
+                    data: {
+                        name: 'alpha',
+                        desc: 'first',
+                        descr: 'second',
+                        desc2: 'third',
+                        TuJiandescr: 'fourth',
+                        Description: 'fifth',
+                    },
+                }}
+                onUpdate={onUpdate}
+            />
+        )
+
+        for (const value of ['first', 'second', 'third', 'fourth', 'fifth']) {
+            const textarea = screen.getByDisplayValue(value)
+            expect(textarea.tagName).toBe('TEXTAREA')
+            expect((textarea as HTMLTextAreaElement).rows).toBe(4)
+        }
+
+        const description = screen.getByDisplayValue('first')
+        fireEvent.change(description, { target: { value: 'first line\nsecond line' } })
+        expect(onUpdate).toHaveBeenCalledWith('a', 'desc', 'first line\nsecond line')
+    })
+
     it('hides the name1 field for tuJianChunWenBen records', () => {
         const onUpdate = vi.fn()
         render(
@@ -83,8 +114,9 @@ describe('JsonEditor', () => {
         const onUpdate = vi.fn()
         render(<JsonEditor groupKey={null} record={{ key: 'a', data: { numbers: [1, 2] } }} onUpdate={onUpdate} />)
 
-        const numberInputs = screen.getAllByRole('spinbutton')
+        const numberInputs = screen.getAllByRole('textbox')
         expect(numberInputs).toHaveLength(2)
+        expect(numberInputs.every(input => input.getAttribute('type') === 'text')).toBe(true)
         fireEvent.change(numberInputs[0]!, { target: { value: '10' } })
         expect(onUpdate).toHaveBeenCalledWith('a', 'numbers', [10, 2])
     })
@@ -207,7 +239,7 @@ describe('JsonEditor', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', 'BuffType', 1)
     })
 
-    it('keeps non meta numeric fields as plain number inputs', () => {
+    it('keeps non meta numeric fields as plain text inputs', () => {
         const onUpdate = vi.fn()
         const metaDatasets: JsonDataset[] = [
             {
@@ -229,9 +261,10 @@ describe('JsonEditor', () => {
             />
         )
 
-        const numberInputs = screen.getAllByRole('spinbutton')
-        expect(numberInputs).toHaveLength(1)
-        fireEvent.change(numberInputs[0]!, { target: { value: '7' } })
+        const numberInput = screen.getByDisplayValue('1')
+        expect(numberInput.getAttribute('type')).toBe('text')
+        expect(numberInput.getAttribute('inputmode')).toBe('decimal')
+        fireEvent.change(numberInput, { target: { value: '7' } })
         expect(onUpdate).toHaveBeenCalledWith('1', 'buffid', 7)
     })
 
@@ -349,7 +382,7 @@ describe('JsonEditor', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', 'NPCCanUse', 0)
     })
 
-    it('renders canjiaPaiMai as an inverted checkbox and NPC attack/defense as number inputs', () => {
+    it('renders canjiaPaiMai as an inverted checkbox and NPC attack/defense as plain text inputs', () => {
         const onUpdate = vi.fn()
         render(
             <JsonEditor
@@ -401,7 +434,7 @@ describe('JsonEditor', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', 'AttackType', [2])
     })
 
-    it('keeps shenTong Skill_Type as a plain number input', () => {
+    it('keeps shenTong Skill_Type as a plain text input', () => {
         const onUpdate = vi.fn()
         const metaDatasets: JsonDataset[] = [
             {
@@ -457,8 +490,9 @@ describe('JsonEditor', () => {
         render(<JsonEditor groupKey="shenTong" record={{ key: '1', data: { AttackType: [0] } }} onUpdate={onUpdate} />)
 
         expect(screen.queryByRole('button', { name: /攻击类型/ })).toBeNull()
-        const numberInputs = screen.getAllByRole('spinbutton')
+        const numberInputs = screen.getAllByRole('textbox')
         expect(numberInputs).toHaveLength(1)
+        expect(numberInputs.every(input => input.getAttribute('type') === 'text')).toBe(true)
         fireEvent.change(numberInputs[0]!, { target: { value: '3' } })
         expect(onUpdate).toHaveBeenCalledWith('1', 'AttackType', [3])
     })
