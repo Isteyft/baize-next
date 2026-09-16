@@ -125,6 +125,8 @@ export default function App() {
     const groupKey: ProjectModGroupKey | null = selection?.kind === 'preload' || selection?.kind === 'project' ? selection.groupKey : null
     const selectedRecord = records.find(record => record.key === selectedRecordKey) ?? null
     const affixRecords = [...collectGroupRecords(preloadProject, 'tuJianChunWenBen'), ...collectGroupRecords(project, 'tuJianChunWenBen')]
+    const shenTongRecords = [...collectGroupRecords(preloadProject, 'shenTong'), ...collectGroupRecords(project, 'shenTong')]
+    const skillRecords = [...collectGroupRecords(preloadProject, 'skill'), ...collectGroupRecords(project, 'skill')]
     const seidDrawerRecords: SeidDrawerRecords = {
         buff: [...collectGroupRecords(preloadProject, 'buff'), ...collectGroupRecords(project, 'buff')],
         skill: [...collectGroupRecords(preloadProject, 'shenTong'), ...collectGroupRecords(project, 'shenTong')],
@@ -484,6 +486,8 @@ export default function App() {
                     record={selectedRecord}
                     metaDatasets={metaDatasets}
                     affixRecords={affixRecords}
+                    shenTongRecords={shenTongRecords}
+                    skillRecords={skillRecords}
                     modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}
                     readAsset={readAsset}
                     seidData={selectedMod?.seidData ?? {}}

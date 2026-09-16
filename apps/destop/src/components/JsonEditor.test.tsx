@@ -334,21 +334,43 @@ describe('JsonEditor', () => {
         expect(screen.getByRole('button', { name: '功法请教类型（7 无法请教）' })).toBeTruthy()
     })
 
-    it('renders NPCCanUse and canjiaPaiMai as local yes/no enums', () => {
+    it('renders item CanSale and NPCCanUse as DF-like checkboxes', () => {
         const onUpdate = vi.fn()
-        const { rerender } = render(<JsonEditor groupKey="item" record={{ key: '1', data: { id: 1, NPCCanUse: 0 } }} onUpdate={onUpdate} />)
+        render(<JsonEditor groupKey="item" record={{ key: '1', data: { id: 1, CanSale: 0, NPCCanUse: 1 } }} onUpdate={onUpdate} />)
 
-        fireEvent.click(screen.getByRole('button', { name: 'NPC是否能使用（0否，1是）（0 否）' }))
-        fireEvent.click(screen.getByText('1 是'))
-        expect(onUpdate).toHaveBeenCalledWith('1', 'NPCCanUse', 1)
+        const canSale = screen.getByRole('checkbox', { name: '是否可出售(0或不填可出售，1不可出售)' })
+        expect((canSale as HTMLInputElement).checked).toBe(true)
+        fireEvent.click(canSale)
+        expect(onUpdate).toHaveBeenCalledWith('1', 'CanSale', 1)
 
-        rerender(<JsonEditor groupKey="npcType" record={{ key: '2', data: { id: 2, canjiaPaiMai: 0 } }} onUpdate={onUpdate} />)
-        fireEvent.click(screen.getByRole('button', { name: '是否参加拍卖（0是，1否）（0 是）' }))
-        fireEvent.click(screen.getByText('1 否'))
-        expect(onUpdate).toHaveBeenCalledWith('2', 'canjiaPaiMai', 1)
+        const npcCanUse = screen.getByRole('checkbox', { name: 'NPC是否能使用（0否，1是）' })
+        expect((npcCanUse as HTMLInputElement).checked).toBe(true)
+        fireEvent.click(npcCanUse)
+        expect(onUpdate).toHaveBeenCalledWith('1', 'NPCCanUse', 0)
     })
 
-    it('renders shenTong AttackType as an editable number array of enum selects', () => {
+    it('renders canjiaPaiMai as an inverted checkbox and NPC attack/defense as number inputs', () => {
+        const onUpdate = vi.fn()
+        render(
+            <JsonEditor
+                groupKey="npcType"
+                record={{ key: '2', data: { id: 2, canjiaPaiMai: 0, AttackType: 3, DefenseType: 10 } }}
+                onUpdate={onUpdate}
+            />
+        )
+
+        const checkbox = screen.getByRole('checkbox', { name: '是否参加拍卖（0是，1否）' })
+        expect((checkbox as HTMLInputElement).checked).toBe(true)
+        fireEvent.click(checkbox)
+        expect(onUpdate).toHaveBeenCalledWith('2', 'canjiaPaiMai', 1)
+
+        fireEvent.change(screen.getByDisplayValue('3'), { target: { value: '4' } })
+        expect(onUpdate).toHaveBeenCalledWith('2', 'AttackType', 4)
+        fireEvent.change(screen.getByDisplayValue('10'), { target: { value: '11' } })
+        expect(onUpdate).toHaveBeenCalledWith('2', 'DefenseType', 11)
+    })
+
+    it('selects shenTong AttackType attributes in a dialog table', () => {
         const onUpdate = vi.fn()
         const metaDatasets: JsonDataset[] = [
             {
@@ -357,7 +379,6 @@ describe('JsonEditor', () => {
                 kind: 'file',
                 records: [
                     { key: '0', data: { Id: 0, Desc: '金' } },
-                    { key: '1', data: { Id: 1, Desc: '木' } },
                     { key: '2', data: { Id: 2, Desc: '水' } },
                 ],
             },
@@ -371,36 +392,37 @@ describe('JsonEditor', () => {
             />
         )
 
-        fireEvent.click(screen.getByRole('button', { name: '攻击类型（0 金） 第 1 项' }))
-        fireEvent.click(screen.getByText('2 水'))
-        expect(onUpdate).toHaveBeenCalledWith('1', 'AttackType', [0, 2])
+        fireEvent.click(screen.getByRole('button', { name: '攻击类型' }))
+        expect(screen.getByRole('dialog', { name: '攻击类型' })).toBeTruthy()
+        expect(screen.getByText('属性')).toBeTruthy()
+        fireEvent.click(screen.getByRole('checkbox', { name: '选择 0 金' }))
+        fireEvent.click(screen.getByRole('checkbox', { name: '选择 2 水' }))
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+        expect(onUpdate).toHaveBeenCalledWith('1', 'AttackType', [2])
     })
 
-    it('removes an array enum value when its current option is reselected', () => {
+    it('keeps shenTong Skill_Type as a plain number input', () => {
         const onUpdate = vi.fn()
         const metaDatasets: JsonDataset[] = [
             {
-                id: 'attack-type',
-                name: 'AttackType',
+                id: 'skill-phase',
+                name: 'SkillPhase',
                 kind: 'file',
-                records: [
-                    { key: '0', data: { Id: 0, Desc: '金' } },
-                    { key: '2', data: { Id: 2, Desc: '水' } },
-                ],
+                records: [{ key: '4', data: { Id: 4, Desc: '瞬发' } }],
             },
         ]
         render(
             <JsonEditor
                 groupKey="shenTong"
-                record={{ key: '1', data: { id: 1, name: '金刃', AttackType: [0, 2] } }}
+                record={{ key: '1', data: { id: 1, name: '金刃', Skill_Type: 4 } }}
                 metaDatasets={metaDatasets}
                 onUpdate={onUpdate}
             />
         )
 
-        fireEvent.click(screen.getByRole('button', { name: '攻击类型（2 水） 第 2 项' }))
-        fireEvent.click(screen.getByRole('button', { name: '2 水' }))
-        expect(onUpdate).toHaveBeenCalledWith('1', 'AttackType', [0])
+        expect(screen.queryByRole('button', { name: /技能释放优先级/ })).toBeNull()
+        fireEvent.change(screen.getByDisplayValue('4'), { target: { value: '5' } })
+        expect(onUpdate).toHaveBeenCalledWith('1', 'Skill_Type', 5)
     })
 
     it('renders skill AttackType as a StaticSkillType enum select', () => {
@@ -517,6 +539,77 @@ describe('JsonEditor', () => {
         expect(iconIndex).toBe(idIndex + 1)
     })
 
+    it('selects and deselects existing shenTong and skill records in dialog tables', () => {
+        const onUpdate = vi.fn()
+        const shenTongRecords = [
+            { key: '1', data: { id: 1, Skill_ID: 1, Skill_Lv: 1, name: '赤焰神通1' } },
+            { key: '2', data: { id: 2, Skill_ID: 1, Skill_Lv: 2, name: '赤焰神通2' } },
+            { key: '201', data: { id: 201, Skill_ID: 201, Skill_Lv: 1, name: '寒冰神通' } },
+        ]
+        const skillRecords = [
+            { key: '5001', data: { id: 5001, name: '长春功' } },
+            { key: '5031', data: { id: 5031, name: '御剑诀' } },
+        ]
+        render(
+            <JsonEditor
+                groupKey="npcType"
+                record={{ key: '700000', data: { id: 700000, skills: [1], staticSkills: [5001] } }}
+                shenTongRecords={shenTongRecords}
+                skillRecords={skillRecords}
+                onUpdate={onUpdate}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: /绑定技能/ }))
+        expect(screen.getByRole('dialog', { name: '绑定技能' })).toBeTruthy()
+        expect(screen.queryByRole('checkbox', { name: '选择 1 赤焰神通2' })).toBeNull()
+        fireEvent.click(screen.getByRole('checkbox', { name: '选择 1 赤焰神通1' }))
+        fireEvent.click(screen.getByRole('checkbox', { name: '选择 201 寒冰神通' }))
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'skills', [201])
+
+        fireEvent.click(screen.getByRole('button', { name: /绑定功法/ }))
+        expect(screen.getByRole('dialog', { name: '绑定功法' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('checkbox', { name: '选择 5031 御剑诀' }))
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'staticSkills', [5001, 5031])
+    })
+
+    it('selects a single skill for yuanying and uses the fixed race enum', () => {
+        const onUpdate = vi.fn()
+        const skillRecords = [
+            { key: '5001', data: { id: 5001, name: '长春功' } },
+            { key: '5187', data: { id: 5187, name: '元婴真诀' } },
+        ]
+        render(
+            <JsonEditor
+                groupKey="npcType"
+                record={{ key: '700000', data: { id: 700000, yuanying: 0, AvatarType: 1 } }}
+                skillRecords={skillRecords}
+                onUpdate={onUpdate}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: '元婴功法' }))
+        fireEvent.click(screen.getByText('5187 元婴真诀'))
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'yuanying', 5187)
+
+        fireEvent.click(screen.getByRole('button', { name: '种族（1 人）' }))
+        fireEvent.click(screen.getByText('4 鬼'))
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'AvatarType', 4)
+    })
+
+    it('keeps NPC LingGen as a plain numeric array', () => {
+        const onUpdate = vi.fn()
+        render(<JsonEditor groupKey="npcType" record={{ key: '700000', data: { id: 700000, LingGen: [20, 20] } }} onUpdate={onUpdate} />)
+
+        const lingGenInputs = screen.getAllByDisplayValue('20')
+        expect(lingGenInputs).toHaveLength(2)
+        expect(screen.queryByRole('button', { name: /绑定灵根/ })).toBeNull()
+        fireEvent.change(lingGenInputs[0]!, { target: { value: '21' } })
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'LingGen', [21, 20])
+    })
+
     it('renders the mod icon preview from the Assets path', async () => {
         const onUpdate = vi.fn()
         const readAsset = vi.fn().mockResolvedValue('data:image/png;base64,AAAA')
@@ -530,24 +623,28 @@ describe('JsonEditor', () => {
             />
         )
 
-        expect(readAsset).toHaveBeenCalledWith('plugins/Next/_/modDemo/Assets/7.png')
-        expect(await screen.findByRole('img')).toHaveProperty('src', 'data:image/png;base64,AAAA')
+        expect(readAsset).toHaveBeenCalledWith('plugins/Next/_/modDemo/Assets/item icon/7.png')
+        const image = await screen.findByRole('img')
+        expect(image).toHaveProperty('src', 'data:image/png;base64,AAAA')
+        expect(image).toHaveProperty('width', 64)
+        expect(image).toHaveProperty('height', 64)
+        expect(image.className).toContain('h-full')
     })
 
-    it('uses Skill_ID as the icon name for shenTong records', async () => {
+    it('uses Skill_ID as the icon name for zero-valued shenTong icons', async () => {
         const onUpdate = vi.fn()
         const readAsset = vi.fn().mockResolvedValue('data:image/png;base64,BBBB')
         render(
             <JsonEditor
                 groupKey="shenTong"
-                record={{ key: '1', data: { id: 1, Skill_ID: 5, name: 'Gold Blade', icon: 42 } }}
+                record={{ key: '1', data: { id: 1, Skill_ID: 5, name: 'Gold Blade', icon: 0 } }}
                 modDirectory="modDemo"
                 readAsset={readAsset}
                 onUpdate={onUpdate}
             />
         )
 
-        expect(readAsset).toHaveBeenCalledWith('modDemo/Assets/5.png')
+        expect(readAsset).toHaveBeenCalledWith('modDemo/Assets/skill icon/5.png')
     })
 
     it('does not request an icon when no mod directory is provided', () => {

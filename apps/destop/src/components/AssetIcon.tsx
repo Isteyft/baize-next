@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
-/** 图标预览尺寸（px），与编号字段并排展示。 */
-export const ASSET_ICON_SIZE = 32
+/** 图标预览尺寸（px），编辑器中预留 64x64 的展示空间。 */
+export const ASSET_ICON_SIZE = 64
 
 interface AssetIconProps {
     /** mod 内图标的相对路径，为空时不请求资源。 */
@@ -18,7 +18,7 @@ interface AssetIconProps {
  * 资源图标预览：按 mod 的 Assets 路径读取图片并直接展示图片，加载失败时展示占位提示。
  * 路径由 resolveModIconPath 统一生成，缺失 mod 目录或资源读取能力时不渲染任何内容。
  */
-export function AssetIcon({ path, resolve, title, className = 'h-8 w-8' }: AssetIconProps) {
+export function AssetIcon({ path, resolve, title, className = 'h-16 w-16' }: AssetIconProps) {
     const [url, setUrl] = useState<string | null>(null)
     const [failed, setFailed] = useState(false)
 

@@ -175,6 +175,7 @@ interface DataRowProps {
     fields: string[]
     primaryField: string | null
     hasPrimaryField: boolean
+    showIconColumn: boolean
     groupKey: ProjectModGroupKey | null
     metaDatasets: JsonDataset[]
     /** 当前记录图标的 Assets 相对路径，无图标时为 null。 */
@@ -191,6 +192,7 @@ const DataRow = memo(function DataRow({
     fields,
     primaryField,
     hasPrimaryField,
+    showIconColumn,
     groupKey,
     metaDatasets,
     iconPath,
@@ -205,14 +207,16 @@ const DataRow = memo(function DataRow({
                 selected ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-raised'
             }`}
         >
-            <td className="w-12 whitespace-nowrap px-3 py-2">
-                <AssetIcon
-                    path={iconPath}
-                    resolve={readAsset}
-                    title={String(record.data[primaryField ?? 'name'] ?? record.key)}
-                    className="h-6 w-6"
-                />
-            </td>
+            {showIconColumn ? (
+                <td className="w-12 whitespace-nowrap px-3 py-2">
+                    <AssetIcon
+                        path={iconPath}
+                        resolve={readAsset}
+                        title={String(record.data[primaryField ?? 'name'] ?? record.key)}
+                        className="h-6 w-6"
+                    />
+                </td>
+            ) : null}
             {hasPrimaryField && primaryField ? (
                 <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs">
                     {record.data[primaryField] !== undefined
@@ -381,6 +385,7 @@ export function DataTable({
                                     fields={fields}
                                     primaryField={primaryField}
                                     hasPrimaryField={hasPrimaryField}
+                                    showIconColumn={showIconColumn}
                                     groupKey={groupKey}
                                     metaDatasets={metaDatasets}
                                     iconPath={iconPaths.get(record.key) ?? null}

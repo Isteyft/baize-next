@@ -98,7 +98,7 @@ const GROUP_FIELD_LABELS: Record<string, Record<string, string>> = {
         TuJiandescr: '技能描述-图鉴',
         canUseDistMax: '攻击距离',
         descr: '技能描述',
-        icon: '图标（必须配0）',
+        icon: '图标',
         id: '编号',
         name: '技能名',
         qingjiaotype: '技能请教类型',

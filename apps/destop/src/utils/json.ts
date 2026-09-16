@@ -456,16 +456,11 @@ export const GROUP_META_ENUM_FIELDS: Partial<Record<ProjectModGroupKey, Record<s
         typePinJie: META_DATASET_NAMES.itemPhaseType,
         Skill_LV: META_DATASET_NAMES.skillQuality,
         qingjiaotype: META_DATASET_NAMES.skillConsultType,
-        Skill_Type: META_DATASET_NAMES.skillPhase,
         seid: META_DATASET_NAMES.skillSeidMeta,
         Affix2: META_DATASET_NAMES.itemEquipSeidMeta,
     },
     npcType: {
         Level: META_DATASET_NAMES.levelType,
-        LingGen: META_DATASET_NAMES.elementType,
-        AttackType: META_DATASET_NAMES.attackType,
-        DefenseType: META_DATASET_NAMES.attackType,
-        AvatarType: META_DATASET_NAMES.createAvatarSeidMeta,
     },
 }
 
@@ -474,16 +469,12 @@ export const GROUP_META_ENUM_FIELDS: Partial<Record<ProjectModGroupKey, Record<s
  * 顺序按业务含义排列：是否参加拍卖用 0 表示“是”、1 表示“否”。
  */
 export const GROUP_LOCAL_ENUM_FIELDS: Partial<Record<ProjectModGroupKey, Record<string, MetaEnumOption[]>>> = {
-    item: {
-        NPCCanUse: [
-            { value: '0', label: '否', id: 0 },
-            { value: '1', label: '是', id: 1 },
-        ],
-    },
     npcType: {
-        canjiaPaiMai: [
-            { value: '0', label: '是', id: 0 },
-            { value: '1', label: '否', id: 1 },
+        AvatarType: [
+            { value: '1', label: '人', id: 1 },
+            { value: '2', label: '妖', id: 2 },
+            { value: '3', label: '魔', id: 3 },
+            { value: '4', label: '鬼', id: 4 },
         ],
     },
 }
@@ -535,10 +526,15 @@ export const GROUP_ICON_FIELDS: Partial<Record<ProjectModGroupKey, string>> = {
     skill: 'icon',
 }
 
-/**
- * 始终以编号命名的图标分组：功法（skill）与神通（shenTong）统一使用 Skill_ID 作为图标文件名，
- * 不使用自身 icon 字段，避免两套编号混用导致图标错位。
- */
+/** 各分组图标在 Assets 下的子目录。 */
+const GROUP_ICON_DIRECTORIES: Partial<Record<ProjectModGroupKey, string>> = {
+    buff: 'buff icon',
+    item: 'item icon',
+    shenTong: 'skill icon',
+    skill: 'staticskill icon',
+}
+
+/** 功法与神通在 icon 为 0 时使用 Skill_ID 作为图标名。 */
 const SKILL_ID_ICON_GROUPS = new Set<ProjectModGroupKey>(['skill', 'shenTong'])
 
 /** mod 内图标所在的资源目录名。 */
@@ -552,30 +548,35 @@ function numericValue(value: JsonValue | undefined): number | null {
 }
 
 /**
- * 解析记录对应的图标文件名。
- * 功法与神通固定使用 Skill_ID；buff/item 在图标字段为 0 时回退到自身主键。
+ * 解析记录在 Assets 下的图标相对路径。
+ * icon 为 0 时：功法/神通使用 Skill_ID，其余分组使用 id/buffid；
+ * icon 不为 0 时统一使用 icon 数值。
  */
-function resolveModIconFileName(groupKey: ProjectModGroupKey, data: Record<string, JsonValue>): string | null {
-    if (SKILL_ID_ICON_GROUPS.has(groupKey)) {
-        const skillId = numericValue(data.Skill_ID)
-        return skillId === null ? null : `${skillId}.png`
-    }
-
+function resolveModIconRelativePath(groupKey: ProjectModGroupKey, data: Record<string, JsonValue>): string | null {
     const iconField = GROUP_ICON_FIELDS[groupKey]
-    if (!iconField) return null
+    const iconDirectory = GROUP_ICON_DIRECTORIES[groupKey]
+    if (!iconField || !iconDirectory) return null
+
     const iconValue = numericValue(data[iconField])
     if (iconValue === null) return null
-    if (iconValue !== 0) return `${iconValue}.png`
 
-    const identifierField = groupKey === 'buff' ? 'buffid' : 'id'
-    const identifier = numericValue(data[identifierField])
-    return identifier === null ? null : `${identifier}.png`
+    let fileName: string | null = null
+    if (iconValue !== 0) {
+        fileName = `${iconValue}.png`
+    } else if (SKILL_ID_ICON_GROUPS.has(groupKey)) {
+        const skillId = numericValue(data.Skill_ID)
+        if (skillId !== null) fileName = `${skillId}.png`
+    } else {
+        const identifierField = groupKey === 'buff' ? 'buffid' : 'id'
+        const identifier = numericValue(data[identifierField])
+        if (identifier !== null) fileName = `${identifier}.png`
+    }
+
+    return fileName ? `${iconDirectory}/${fileName}` : null
 }
 
 /**
- * 解析一条记录在 mod 的 Assets 目录中对应的图标相对路径。
- * 功法与神通固定使用 Skill_ID 命名（Skill_ID.png）；其余分组在图标字段为 0 时按编号命名，
- * 否则使用填写值命名（图标值.png）。
+ * 解析一条记录在 mod 的 Assets 对应分组目录中的图标相对路径。
  * @param modDirectory mod 文件夹相对项目根目录的路径，例如 plugins/Next/_/modDemo；也支持直接传 mod 文件夹名。
  * @param groupKey 当前分组 key。
  * @param data 记录数据。
@@ -589,9 +590,9 @@ export function resolveModIconPath(
     if (!groupKey) return null
     const directory = modDirectory.trim().replace(/\\/g, '/').replace(/\/+$/, '')
     if (!directory) return null
-    const iconFile = resolveModIconFileName(groupKey, data)
-    if (!iconFile) return null
-    return `${directory}/${MOD_ICON_DIRECTORY}/${iconFile}`
+    const iconRelativePath = resolveModIconRelativePath(groupKey, data)
+    if (!iconRelativePath) return null
+    return `${directory}/${MOD_ICON_DIRECTORY}/${iconRelativePath}`
 }
 
 /**
@@ -602,7 +603,53 @@ export function resolveModIconPath(
  */
 export function hasModIcon(groupKey: ProjectModGroupKey | null, data: Record<string, JsonValue>): boolean {
     if (!groupKey) return false
-    return resolveModIconFileName(groupKey, data) !== null
+    return resolveModIconRelativePath(groupKey, data) !== null
+}
+
+export interface RecordSelectOption {
+    /** 用于下拉框比较的数值 id 字符串。 */
+    value: string
+    /** 记录的数值 id。 */
+    id: number
+    /** 包含 id 与名称的展示文本。 */
+    label: string
+}
+
+/** 按神通 Skill_ID 合并同一技能的不同等级，优先使用最低等级记录作为展示名称。 */
+export function getShenTongSkillSelectOptions(records: JsonRecord[]): RecordSelectOption[] {
+    const bySkillId = new Map<number, { name: string; level: number }>()
+    for (const record of records) {
+        const skillId = numericValue(record.data.Skill_ID)
+        if (skillId === null) continue
+        const name = typeof record.data.name === 'string' ? record.data.name.trim() : ''
+        const level = numericValue(record.data.Skill_Lv) ?? Number.MAX_SAFE_INTEGER
+        const current = bySkillId.get(skillId)
+        if (!current || level < current.level) bySkillId.set(skillId, { name, level })
+    }
+    return Array.from(bySkillId.entries())
+        .sort(([left], [right]) => left - right)
+        .map(([skillId, item]) => ({
+            value: String(skillId),
+            id: skillId,
+            label: item.name ? `${skillId} ${item.name}` : String(skillId),
+        }))
+}
+
+/**
+ * 将已加载的 JSON 记录转换为选择器选项，优先使用 data.id，其次使用数值化的记录 key。
+ * 重复 id 只保留第一条，避免 mod 预加载与项目数据同时存在时出现重复选项。
+ */
+export function getRecordSelectOptions(records: JsonRecord[]): RecordSelectOption[] {
+    const options: RecordSelectOption[] = []
+    const seen = new Set<number>()
+    for (const record of records) {
+        const id = numericValue(record.data.id) ?? numericValue(record.key)
+        if (id === null || seen.has(id)) continue
+        seen.add(id)
+        const name = typeof record.data.name === 'string' ? record.data.name.trim() : ''
+        options.push({ value: String(id), id, label: name ? `${id} ${name}` : String(id) })
+    }
+    return options
 }
 
 export interface AffixProjectTypeOption {

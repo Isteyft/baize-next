@@ -197,8 +197,25 @@ describe('DataTable', () => {
             />
         )
 
-        expect(readAsset).toHaveBeenCalledWith('plugins/Next/_/modDemo/Assets/7.png')
+        expect(readAsset).toHaveBeenCalledWith('plugins/Next/_/modDemo/Assets/item icon/7.png')
         expect(await screen.findByRole('img')).toHaveProperty('src', 'data:image/png;base64,AAAA')
+    })
+
+    it('aligns header and data cells when the icon column is hidden', () => {
+        const { container } = render(
+            <DataTable
+                groupKey="item"
+                records={[{ key: '1', data: { id: 1, name: 'Sword', desc: 'A sword' } }]}
+                selectedKey={null}
+                onSelect={vi.fn()}
+            />
+        )
+
+        const headerCells = container.querySelectorAll('thead tr:first-child th')
+        const dataCells = container.querySelectorAll('tbody tr:first-child td')
+
+        expect(headerCells).toHaveLength(dataCells.length)
+        expect(headerCells).toHaveLength(3)
     })
 
     it('renders an empty table body for empty records', () => {

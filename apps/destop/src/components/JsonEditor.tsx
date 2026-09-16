@@ -1,6 +1,6 @@
 import { translateField } from '@baize-next/i18n'
 import type { JsonDataset, JsonRecord, JsonValue, ProjectModGroupKey, ProjectSeidData, SeidDataKey } from '@baize-next/types'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import {
     getAffixProjectTypeOptions,
@@ -8,9 +8,12 @@ import {
     getAffixTypeOptions,
     getGroupEnumOptions,
     getMetaStringOptions,
+    getRecordSelectOptions,
+    getShenTongSkillSelectOptions,
     GROUP_ICON_FIELDS,
     hasModIcon,
     META_DATASET_NAMES,
+    type RecordSelectOption,
     resolveModIconPath,
 } from '../utils/json'
 import { isSeidProjectGroup, type SeidDrawerRecords } from '../utils/seid'
@@ -27,6 +30,10 @@ interface JsonEditorProps {
     record: JsonRecord | null
     metaDatasets?: JsonDataset[]
     affixRecords?: JsonRecord[]
+    /** 当前已加载的神通记录，供 NPC 技能绑定选择。 */
+    shenTongRecords?: JsonRecord[]
+    /** 当前已加载的功法记录，供 NPC 功法绑定选择。 */
+    skillRecords?: JsonRecord[]
     /** 当前 mod 文件夹相对项目根目录的路径，用于解析 Assets 下的图标。 */
     modDirectory?: string | null
     /** 读取 mod 资源并返回可展示的 data URL。 */
@@ -65,8 +72,16 @@ const ICON_FIELD_ANCHORS = ['id', 'buffid']
 /** 使用 0/1 复选框即可清晰表达的字段。 */
 const BOOL_NUMBER_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     buff: ['isHide', 'ShowOnlyOne'],
+    item: ['CanSale', 'NPCCanUse'],
     skill: ['DF'],
     shenTong: ['DF'],
+    npcType: ['canjiaPaiMai'],
+}
+
+/** 这些字段使用 0 表示勾选、 1 表示未勾选。 */
+const INVERTED_BOOL_NUMBER_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
+    item: ['CanSale'],
+    npcType: ['canjiaPaiMai'],
 }
 
 /** 字符串型 Meta 枚举字段：分组 -> 字段名 -> 数据集名称。 */
@@ -274,15 +289,256 @@ function JsonEnumInput({ value, options, label, multiple = false, onSelect }: Js
     )
 }
 
-function JsonFlagInput({ value, label, onChange }: { value: JsonValue; label: string; onChange: (value: JsonValue) => void }) {
-    const checked = value === 1
+function numericIds(value: JsonValue): number[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is number => typeof item === 'number')
+}
+
+function JsonMultiSelectDialog({
+    value,
+    options,
+    label,
+    optionColumnLabel = '名称',
+    onChange,
+}: {
+    value: JsonValue
+    options: { value: string; id: number; label: string }[]
+    label: string
+    optionColumnLabel?: string
+    onChange: (value: JsonValue) => void
+}) {
+    const [open, setOpen] = useState(false)
+    const [query, setQuery] = useState('')
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set(numericIds(value)))
+    const currentIds = numericIds(value)
+    const keyword = query.trim().toLowerCase()
+    const filtered = keyword ? options.filter(option => option.label.toLowerCase().includes(keyword)) : options
+    const currentOptions = options.filter(option => selectedIds.has(option.id))
+    const allChecked = options.length > 0 && options.every(option => selectedIds.has(option.id))
+
+    useEffect(() => {
+        if (!open) return
+        setSelectedIds(new Set(numericIds(value)))
+        function handleKeyDown(event: KeyboardEvent): void {
+            if (event.key === 'Escape') setOpen(false)
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [open, value])
+
+    function toggle(id: number): void {
+        setSelectedIds(previous => {
+            const next = new Set(previous)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    function toggleAll(): void {
+        setSelectedIds(previous => {
+            const next = new Set(previous)
+            if (allChecked) {
+                for (const option of options) next.delete(option.id)
+            } else {
+                for (const option of options) next.add(option.id)
+            }
+            return next
+        })
+    }
+
+    function commit(): void {
+        const knownIds = new Set(options.map(option => option.id))
+        const next = currentIds.filter(id => !knownIds.has(id))
+        for (const option of options) {
+            if (selectedIds.has(option.id)) next.push(option.id)
+        }
+        onChange(next)
+        setOpen(false)
+    }
+
+    const summary =
+        selectedIds.size > 0
+            ? `${selectedIds.size} 项：${currentOptions
+                  .slice(0, 3)
+                  .map(option => option.label)
+                  .join('、')}`
+            : '未选择'
+
+    return (
+        <>
+            <button
+                type="button"
+                aria-label={label}
+                onClick={() => setOpen(true)}
+                className="flex min-h-9 w-full items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-hover focus:outline-none"
+            >
+                <span className={selectedIds.size > 0 ? 'truncate text-ink' : 'text-ink-subtle'}>{summary}</span>
+                <span aria-hidden="true" className="shrink-0 text-ink-muted">
+                    选择
+                </span>
+            </button>
+            {open ? (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setOpen(false)
+                    }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={label}
+                        className="flex max-h-[78vh] w-[min(820px,calc(100vw-32px))] flex-col overflow-hidden rounded-md border border-line-strong bg-base shadow-2xl"
+                    >
+                        <header className="flex shrink-0 items-center justify-between border-b border-line bg-panel px-4 py-3">
+                            <h2 className="min-w-0 truncate text-sm font-medium text-ink-soft">{label}</h2>
+                            <button
+                                type="button"
+                                aria-label="关闭"
+                                onClick={() => setOpen(false)}
+                                className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm text-ink-muted transition-colors hover:bg-hover hover:text-ink"
+                            >
+                                X
+                            </button>
+                        </header>
+                        <div className="shrink-0 border-b border-line bg-panel p-3">
+                            <input
+                                type="search"
+                                aria-label={`搜索${label}`}
+                                value={query}
+                                onChange={event => setQuery(event.target.value)}
+                                placeholder="搜索 id / 名称"
+                                className={inputClass}
+                            />
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-auto bg-panel">
+                            {filtered.length === 0 ? (
+                                <p className="px-4 py-8 text-center text-sm text-ink-subtle">没有匹配项</p>
+                            ) : (
+                                <table className="w-full border-collapse text-left text-sm">
+                                    <thead className="sticky top-0 bg-raised text-ink-muted">
+                                        <tr>
+                                            <th className="w-14 border-b border-line-strong px-3 py-2">
+                                                <input
+                                                    type="checkbox"
+                                                    aria-label={`全选${label}`}
+                                                    checked={allChecked}
+                                                    onChange={toggleAll}
+                                                    className="h-4 w-4 accent-accent"
+                                                />
+                                            </th>
+                                            <th className="w-32 border-b border-line-strong px-3 py-2 text-xs font-medium">ID</th>
+                                            <th className="border-b border-line-strong px-3 py-2 text-xs font-medium">
+                                                {optionColumnLabel}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filtered.map(option => {
+                                            const checked = selectedIds.has(option.id)
+                                            const name = option.label.startsWith(`${option.id} `)
+                                                ? option.label.slice(String(option.id).length + 1)
+                                                : option.label
+                                            return (
+                                                <tr
+                                                    key={option.value}
+                                                    onClick={() => toggle(option.id)}
+                                                    className={`cursor-pointer border-b border-line transition-colors ${
+                                                        checked ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-raised'
+                                                    }`}
+                                                >
+                                                    <td className="px-3 py-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            aria-label={`选择 ${option.label}`}
+                                                            checked={checked}
+                                                            onClick={event => event.stopPropagation()}
+                                                            onChange={() => toggle(option.id)}
+                                                            className="h-4 w-4 accent-accent"
+                                                        />
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{option.id}</td>
+                                                    <td className="px-3 py-2">{name}</td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-panel px-4 py-3">
+                            <span className="text-xs text-ink-subtle">已选择 {selectedIds.size} 项</span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setOpen(false)}
+                                    className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft transition-colors hover:bg-hover hover:text-ink"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={commit}
+                                    className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover"
+                                >
+                                    确定
+                                </button>
+                            </div>
+                        </footer>
+                    </div>
+                </div>
+            ) : null}
+        </>
+    )
+}
+
+function JsonRecordSingleSelect({
+    value,
+    options,
+    label,
+    onChange,
+}: {
+    value: JsonValue
+    options: RecordSelectOption[]
+    label: string
+    onChange: (value: JsonValue) => void
+}) {
+    const current = typeof value === 'number' && Number.isFinite(value) ? value : 0
+    const selectOptions = [{ value: '0', label: '0 无' }, ...options.map(option => ({ value: option.value, label: option.label }))]
+    if (!selectOptions.some(option => option.value === String(current))) {
+        selectOptions.unshift({ value: String(current), label: String(current) })
+    }
+    return (
+        <Select
+            value={String(current)}
+            options={selectOptions}
+            onChange={next => onChange(Number(next))}
+            aria-label={label}
+            className="w-full"
+        />
+    )
+}
+
+function JsonFlagInput({
+    value,
+    label,
+    inverted = false,
+    onChange,
+}: {
+    value: JsonValue
+    label: string
+    inverted?: boolean
+    onChange: (value: JsonValue) => void
+}) {
+    const checked = inverted ? value === 0 : value === 1
     return (
         <label className="flex h-9 items-center gap-2 rounded-md border border-line bg-panel px-2.5 text-sm text-ink">
             <input
                 type="checkbox"
                 aria-label={label}
                 checked={checked}
-                onChange={event => onChange(event.target.checked ? 1 : 0)}
+                onChange={event => onChange(event.target.checked ? (inverted ? 0 : 1) : inverted ? 1 : 0)}
                 className="h-4 w-4 accent-accent"
             />
             <span>{checked ? '是' : '否'}</span>
@@ -295,6 +551,8 @@ export function JsonEditor({
     record,
     metaDatasets = [],
     affixRecords = [],
+    shenTongRecords = [],
+    skillRecords = [],
     modDirectory = null,
     readAsset,
     seidData = {},
@@ -313,6 +571,8 @@ export function JsonEditor({
         record && iconField ? (ICON_FIELD_ANCHORS.find(anchor => anchor !== iconField && record.data[anchor] !== undefined) ?? null) : null
     const iconPath =
         record && modDirectory && hasModIcon(groupKey, record.data) ? resolveModIconPath(modDirectory, groupKey, record.data) : null
+    const shenTongOptions = useMemo(() => getShenTongSkillSelectOptions(shenTongRecords), [shenTongRecords])
+    const skillOptions = useMemo(() => getRecordSelectOptions(skillRecords), [skillRecords])
     const seidGroupKey = record && groupKey && isSeidProjectGroup(groupKey) ? groupKey : null
     if (record && seidGroupKey && !fields.includes('seid')) fields.push('seid')
 
@@ -325,6 +585,7 @@ export function JsonEditor({
             (groupKey === 'buff' || groupKey === 'item' || groupKey === 'skill' || groupKey === 'shenTong') &&
             AFFIX_FIELDS.has(field)
         const isFlagField = groupKey !== null && (BOOL_NUMBER_FIELDS[groupKey] ?? []).includes(field)
+        const isInvertedFlagField = groupKey !== null && (INVERTED_BOOL_NUMBER_FIELDS[groupKey] ?? []).includes(field)
         const metaOptions = getGroupEnumOptions(groupKey, field, metaDatasets)
         const stringDatasetName = groupKey ? META_STRING_FIELDS[groupKey]?.[field] : undefined
         const stringOptions = stringDatasetName ? getMetaStringOptions(metaDatasets, stringDatasetName) : []
@@ -350,7 +611,51 @@ export function JsonEditor({
             const options = getAffixSelectOptions(affixRecords)
             control = <AffixSelect value={value} options={options} label={label} onCommit={next => onUpdate(record.key, field, next)} />
         } else if (isFlagField) {
-            control = <JsonFlagInput value={value} label={label} onChange={next => onUpdate(record.key, field, next)} />
+            control = (
+                <JsonFlagInput
+                    value={value}
+                    label={label}
+                    inverted={isInvertedFlagField}
+                    onChange={next => onUpdate(record.key, field, next)}
+                />
+            )
+        } else if (groupKey === 'shenTong' && field === 'AttackType' && metaOptions.length > 0) {
+            control = (
+                <JsonMultiSelectDialog
+                    value={value}
+                    options={metaOptions}
+                    label={label}
+                    optionColumnLabel="属性"
+                    onChange={next => onUpdate(record.key, field, next)}
+                />
+            )
+        } else if (groupKey === 'npcType' && field === 'skills') {
+            control = (
+                <JsonMultiSelectDialog
+                    value={value}
+                    options={shenTongOptions}
+                    label={label}
+                    onChange={next => onUpdate(record.key, field, next)}
+                />
+            )
+        } else if (groupKey === 'npcType' && field === 'staticSkills') {
+            control = (
+                <JsonMultiSelectDialog
+                    value={value}
+                    options={skillOptions}
+                    label={label}
+                    onChange={next => onUpdate(record.key, field, next)}
+                />
+            )
+        } else if (groupKey === 'npcType' && field === 'yuanying') {
+            control = (
+                <JsonRecordSingleSelect
+                    value={value}
+                    options={skillOptions}
+                    label={label}
+                    onChange={next => onUpdate(record.key, field, next)}
+                />
+            )
         } else if (stringOptions.length > 0) {
             const current = enumValueOf(value)
             control = (
@@ -425,7 +730,11 @@ export function JsonEditor({
     function renderIconPreview() {
         if (!record || !iconPath) return null
         const title = typeof record.data.name === 'string' ? record.data.name : String(record.key)
-        return <AssetIcon path={iconPath} resolve={readAsset} title={title} />
+        return (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-line bg-raised">
+                <AssetIcon path={iconPath} resolve={readAsset} title={title} className="h-full w-full" />
+            </div>
+        )
     }
 
     function renderMovedIconField() {
@@ -436,7 +745,7 @@ export function JsonEditor({
                 <div className="mb-1.5">
                     <span className="block text-sm font-medium text-ink-soft">{label}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">{renderControl(iconField)}</div>
                     {renderIconPreview()}
                 </div>

@@ -13,6 +13,8 @@ import {
     getMetaEnumLabel,
     getMetaEnumOptions,
     getMetaStringOptions,
+    getRecordSelectOptions,
+    getShenTongSkillSelectOptions,
     isRecordMap,
     isRecordObject,
     META_DATASET_NAMES,
@@ -232,6 +234,8 @@ describe('project JSON mapping', () => {
             parseMetaJsonEntry({ relativePath: 'Data/Meta/SkillQuality.json', content: '[{"Id":3,"Desc":"天阶"}]' }),
             parseMetaJsonEntry({ relativePath: 'Data/Meta/SkillConsultType.json', content: '[{"Id":7,"Desc":"无法请教"}]' }),
             parseMetaJsonEntry({ relativePath: 'Data/Meta/GuideType.json', content: '[{"Id":7,"Desc":"功法"}]' }),
+            parseMetaJsonEntry({ relativePath: 'Data/Meta/AttackType.json', content: '[{"Id":0,"Desc":"金"}]' }),
+            parseMetaJsonEntry({ relativePath: 'Data/Meta/SkillPhase.json', content: '[{"Id":4,"Desc":"瞬发"}]' }),
         ]
 
         expect(getGroupEnumOptions('item', 'TuJianType', datasets)).toEqual([{ value: '4', label: '4 丹药', id: 4 }])
@@ -240,16 +244,49 @@ describe('project JSON mapping', () => {
         expect(getGroupEnumOptions('skill', 'Skill_LV', datasets)).toEqual([{ value: '3', label: '3 天阶', id: 3 }])
         expect(getGroupEnumOptions('skill', 'qingjiaotype', datasets)).toEqual([{ value: '7', label: '7 无法请教', id: 7 }])
         expect(getGroupEnumOptions('shenTong', 'TuJianType', datasets)).toEqual([{ value: '7', label: '7 功法', id: 7 }])
+        expect(getGroupEnumOptions('shenTong', 'AttackType', datasets)).toEqual([{ value: '0', label: '0 金', id: 0 }])
+        expect(getGroupEnumOptions('shenTong', 'Skill_Type', datasets)).toEqual([])
+        expect(getGroupEnumOptions('npcType', 'AttackType', datasets)).toEqual([])
+        expect(getGroupEnumOptions('npcType', 'DefenseType', datasets)).toEqual([])
     })
 
     it('builds local boolean enum options with the requested value meaning', () => {
-        expect(getGroupEnumOptions('item', 'NPCCanUse', [])).toEqual([
-            { value: '0', label: '0 否', id: 0 },
-            { value: '1', label: '1 是', id: 1 },
+        expect(getGroupEnumOptions('item', 'NPCCanUse', [])).toEqual([])
+        expect(getGroupEnumOptions('npcType', 'canjiaPaiMai', [])).toEqual([])
+        expect(getGroupEnumOptions('npcType', 'AvatarType', [])).toEqual([
+            { value: '1', label: '1 人', id: 1 },
+            { value: '2', label: '2 妖', id: 2 },
+            { value: '3', label: '3 魔', id: 3 },
+            { value: '4', label: '4 鬼', id: 4 },
         ])
-        expect(getGroupEnumOptions('npcType', 'canjiaPaiMai', [])).toEqual([
-            { value: '0', label: '0 是', id: 0 },
-            { value: '1', label: '1 否', id: 1 },
+        expect(getGroupEnumOptions('npcType', 'LingGen', [])).toEqual([])
+    })
+
+    it('groups shenTong options by Skill_ID and prefers the base level name', () => {
+        const records: JsonRecord[] = [
+            { key: '1', data: { id: 1, Skill_ID: 10, Skill_Lv: 1, name: '金刃1' } },
+            { key: '2', data: { id: 2, Skill_ID: 10, Skill_Lv: 2, name: '金刃2' } },
+            { key: '201', data: { id: 201, Skill_ID: 201, Skill_Lv: 1, name: '水刃' } },
+            { key: 'missing', data: { id: 999, name: '无 Skill_ID' } },
+        ]
+
+        expect(getShenTongSkillSelectOptions(records)).toEqual([
+            { value: '10', id: 10, label: '10 金刃1' },
+            { value: '201', id: 201, label: '201 水刃' },
+        ])
+    })
+
+    it('builds de-duplicated options from loaded skill records', () => {
+        const records: JsonRecord[] = [
+            { key: '1', data: { id: 1, name: '赤焰' } },
+            { key: '201', data: { id: 201, name: '寒冰' } },
+            { key: '1-duplicate', data: { id: 1, name: '重复' } },
+            { key: 'no-id', data: { name: '无数值 id' } },
+        ]
+
+        expect(getRecordSelectOptions(records)).toEqual([
+            { value: '1', id: 1, label: '1 赤焰' },
+            { value: '201', id: 201, label: '201 寒冰' },
         ])
     })
 
@@ -345,31 +382,36 @@ describe('skill attack script enum', () => {
 })
 
 describe('mod icon path resolution', () => {
-    it('resolves id based icons when the icon field is zero', () => {
-        expect(resolveModIconPath('modDemo', 'buff', { buffid: 100, BuffIcon: 0 })).toBe('modDemo/Assets/100.png')
-        expect(resolveModIconPath('modDemo', 'item', { id: 7, ItemIcon: 0 })).toBe('modDemo/Assets/7.png')
+    it('resolves id based icons in each Assets icon directory when the icon field is zero', () => {
+        expect(resolveModIconPath('modDemo', 'buff', { buffid: 100, BuffIcon: 0 })).toBe('modDemo/Assets/buff icon/100.png')
+        expect(resolveModIconPath('modDemo', 'item', { id: 7, ItemIcon: 0 })).toBe('modDemo/Assets/item icon/7.png')
     })
 
-    it('uses Skill_ID for skill and shenTong icons', () => {
-        expect(resolveModIconPath('modDemo', 'shenTong', { id: 1, Skill_ID: 5, icon: 42 })).toBe('modDemo/Assets/5.png')
-        expect(resolveModIconPath('modDemo', 'skill', { id: 3, Skill_ID: 9, icon: 0 })).toBe('modDemo/Assets/9.png')
+    it('uses Skill_ID for zero-valued skill and shenTong icons', () => {
+        expect(resolveModIconPath('modDemo', 'shenTong', { id: 1, Skill_ID: 5, icon: 0 })).toBe('modDemo/Assets/skill icon/5.png')
+        expect(resolveModIconPath('modDemo', 'skill', { id: 3, Skill_ID: 9, icon: 0 })).toBe('modDemo/Assets/staticskill icon/9.png')
     })
 
-    it('falls back to common identifier fields for the zero case', () => {
-        expect(resolveModIconPath('modDemo', 'buff', { buffid: 5, BuffIcon: 0 })).toBe('modDemo/Assets/5.png')
-        expect(resolveModIconPath('modDemo', 'shenTong', { id: 5, icon: 0 })).toBeNull()
+    it('uses the icon number when the icon field is not zero', () => {
+        expect(resolveModIconPath('modDemo', 'buff', { buffid: 5, BuffIcon: 42 })).toBe('modDemo/Assets/buff icon/42.png')
+        expect(resolveModIconPath('modDemo', 'item', { id: 5, ItemIcon: 43 })).toBe('modDemo/Assets/item icon/43.png')
+        expect(resolveModIconPath('modDemo', 'shenTong', { id: 5, Skill_ID: 1, icon: 44 })).toBe('modDemo/Assets/skill icon/44.png')
+        expect(resolveModIconPath('modDemo', 'skill', { id: 5, Skill_ID: 1, icon: 45 })).toBe('modDemo/Assets/staticskill icon/45.png')
     })
 
     it('supports mod directories nested inside the project and normalizes separators', () => {
-        expect(resolveModIconPath('plugins/Next/_/modDemo', 'item', { id: 7, ItemIcon: 0 })).toBe('plugins/Next/_/modDemo/Assets/7.png')
+        expect(resolveModIconPath('plugins/Next/_/modDemo', 'item', { id: 7, ItemIcon: 0 })).toBe(
+            'plugins/Next/_/modDemo/Assets/item icon/7.png'
+        )
         expect(resolveModIconPath('plugins\\Next\\_\\modDemo\\', 'item', { id: 7, ItemIcon: 0 })).toBe(
-            'plugins/Next/_/modDemo/Assets/7.png'
+            'plugins/Next/_/modDemo/Assets/item icon/7.png'
         )
     })
 
     it('returns null for unknown groups or invalid icon values', () => {
         expect(resolveModIconPath('modDemo', 'config', { icon: 0 })).toBeNull()
         expect(resolveModIconPath('modDemo', 'buff', { buffid: 1 })).toBeNull()
+        expect(resolveModIconPath('modDemo', 'shenTong', { id: 5, Skill_ID: 5 })).toBeNull()
         expect(resolveModIconPath('modDemo', 'buff', { buffid: 1, BuffIcon: 'x' })).toBeNull()
         expect(resolveModIconPath('modDemo', null, { buffid: 1, BuffIcon: 0 })).toBeNull()
         expect(resolveModIconPath('   ', 'buff', { buffid: 1, BuffIcon: 0 })).toBeNull()
