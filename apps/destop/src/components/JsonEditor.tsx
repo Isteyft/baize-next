@@ -2,6 +2,7 @@ import { translateField } from '@baize-next/i18n'
 import type { JsonDataset, JsonRecord, JsonValue, ProjectModGroupKey, ProjectSeidData, SeidDataKey } from '@baize-next/types'
 import { useEffect, useMemo, useState } from 'react'
 
+import { getDefaultRecordFieldValue, getRecordFieldNames } from '../utils/defaultRecordTemplates'
 import {
     getAffixProjectTypeOptions,
     getAffixSelectOptions,
@@ -114,7 +115,7 @@ function createArrayItemValue(values: JsonValue[]): JsonValue {
     return 0
 }
 
-function JsonArrayInput({ value, onChange }: { value: JsonValue[]; onChange: (value: JsonValue[]) => void }) {
+function JsonArrayInput({ value, label, onChange }: { value: JsonValue[]; label: string; onChange: (value: JsonValue[]) => void }) {
     function handleAdd(): void {
         onChange([...value, createArrayItemValue(value)])
     }
@@ -154,7 +155,11 @@ function JsonArrayInput({ value, onChange }: { value: JsonValue[]; onChange: (va
                         {value.map((item, index) => (
                             <tr key={index} className="border-b border-line">
                                 <td className="py-1.5 pr-2 align-top">
-                                    <JsonFieldInput value={item} onChange={next => handleItemChange(index, next)} />
+                                    <JsonFieldInput
+                                        label={`${label} ${index + 1}`}
+                                        value={item}
+                                        onChange={next => handleItemChange(index, next)}
+                                    />
                                 </td>
                                 <td className="w-14 py-1.5 text-right align-top">
                                     <button
@@ -175,7 +180,7 @@ function JsonArrayInput({ value, onChange }: { value: JsonValue[]; onChange: (va
     )
 }
 
-function JsonComplexInput({ value, onCommit }: { value: JsonValue; onCommit: (value: JsonValue) => void }) {
+function JsonComplexInput({ value, label, onCommit }: { value: JsonValue; label: string; onCommit: (value: JsonValue) => void }) {
     const [draft, setDraft] = useState(() => JSON.stringify(value, null, 2))
     const [error, setError] = useState<string | null>(null)
 
@@ -191,6 +196,7 @@ function JsonComplexInput({ value, onCommit }: { value: JsonValue; onCommit: (va
     return (
         <>
             <textarea
+                aria-label={label}
                 value={draft}
                 rows={4}
                 spellCheck={false}
@@ -208,10 +214,12 @@ function JsonComplexInput({ value, onCommit }: { value: JsonValue; onCommit: (va
 
 function NumericTextInput({
     value,
+    label,
     onChange,
     className = inputClass,
 }: {
     value: number
+    label: string
     onChange: (value: number) => void
     className?: string
 }) {
@@ -242,6 +250,7 @@ function NumericTextInput({
         <input
             type="text"
             inputMode="decimal"
+            aria-label={label}
             value={draft}
             onChange={event => handleChange(event.target.value)}
             onBlur={handleBlur}
@@ -252,33 +261,46 @@ function NumericTextInput({
 
 function JsonFieldInput({
     value,
+    label,
     multiline = false,
     onChange,
 }: {
     value: JsonValue
+    label: string
     multiline?: boolean
     onChange: (value: JsonValue) => void
 }) {
     if (Array.isArray(value)) {
-        return <JsonArrayInput value={value} onChange={onChange} />
+        return <JsonArrayInput value={value} label={label} onChange={onChange} />
     }
     if (value === null) {
-        return <input type="text" value="null" readOnly className={`${inputClass} opacity-60`} />
+        return <input type="text" aria-label={label} value="null" readOnly className={`${inputClass} opacity-60`} />
     }
     if (typeof value === 'string') {
         if (multiline) {
-            return <textarea value={value} rows={4} onChange={event => onChange(event.target.value)} className={`${inputClass} resize-y`} />
+            return (
+                <textarea
+                    aria-label={label}
+                    value={value}
+                    rows={4}
+                    onChange={event => onChange(event.target.value)}
+                    className={`${inputClass} resize-y`}
+                />
+            )
         }
-        return <input type="text" value={value} onChange={event => onChange(event.target.value)} className={inputClass} />
+        return (
+            <input type="text" aria-label={label} value={value} onChange={event => onChange(event.target.value)} className={inputClass} />
+        )
     }
     if (typeof value === 'number') {
-        return <NumericTextInput value={value} onChange={onChange} />
+        return <NumericTextInput value={value} label={label} onChange={onChange} />
     }
     if (typeof value === 'boolean') {
         return (
             <label className="flex h-9 items-center gap-2 rounded-md border border-line bg-panel px-2.5">
                 <input
                     type="checkbox"
+                    aria-label={label}
                     checked={value}
                     onChange={event => onChange(event.target.checked)}
                     className="h-4 w-4 accent-accent"
@@ -287,7 +309,7 @@ function JsonFieldInput({
             </label>
         )
     }
-    return <JsonComplexInput value={value} onCommit={onChange} />
+    return <JsonComplexInput value={value} label={label} onCommit={onChange} />
 }
 
 interface JsonEnumInputProps {
@@ -825,7 +847,7 @@ export function JsonEditor({
     const hiddenFields = groupKey ? (HIDDEN_FIELDS[groupKey] ?? []) : []
     const legacyAffixFields = groupKey ? (LEGACY_AFFIX_FIELDS[groupKey] ?? []) : []
     const fields = record
-        ? Object.keys(record.data).filter(field => !hiddenFields.includes(field) && !legacyAffixFields.includes(field))
+        ? getRecordFieldNames(groupKey, record.data).filter(field => !hiddenFields.includes(field) && !legacyAffixFields.includes(field))
         : []
     const iconField = groupKey ? GROUP_ICON_FIELDS[groupKey] : undefined
     const iconAnchorField =
@@ -844,7 +866,7 @@ export function JsonEditor({
     function renderControl(field: string) {
         if (!record) return null
         const label = groupKey ? translateField(groupKey, field) : field
-        const value = record.data[field]
+        const value = record.data[field] ?? getDefaultRecordFieldValue(groupKey, field, record.key) ?? null
         const isAffixField =
             groupKey !== null &&
             (groupKey === 'buff' || groupKey === 'item' || groupKey === 'skill' || groupKey === 'shenTong') &&
@@ -855,7 +877,12 @@ export function JsonEditor({
         const stringDatasetName = groupKey ? META_STRING_FIELDS[groupKey]?.[field] : undefined
         const stringOptions = stringDatasetName ? getMetaStringOptions(metaDatasets, stringDatasetName) : []
         let control = (
-            <JsonFieldInput value={value} multiline={isDescriptionField(field)} onChange={next => onUpdate(record.key, field, next)} />
+            <JsonFieldInput
+                label={label}
+                value={value}
+                multiline={isDescriptionField(field)}
+                onChange={next => onUpdate(record.key, field, next)}
+            />
         )
         const isSeidField = field === 'seid' && seidGroupKey !== null
 
@@ -1020,7 +1047,7 @@ export function JsonEditor({
 
     function getSelectionDetails(field: string): string | null {
         if (!record) return null
-        const value = record.data[field]
+        const value = record.data[field] ?? getDefaultRecordFieldValue(groupKey, field, record.key) ?? null
         if (groupKey === 'npcWuDao' && field === 'wudaoID') return selectedOptionLabels(value, wuDaoOptions)
         if (groupKey === 'npcType' && field === 'skills') return selectedOptionLabels(value, shenTongOptions)
         if (groupKey === 'npcType' && field === 'staticSkills') return selectedOptionLabels(value, skillOptions)

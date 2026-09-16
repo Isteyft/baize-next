@@ -1,5 +1,6 @@
 {
     "BuffJsonData": {
+        "Affix": "词缀（炼器）",
         "BuffIcon": "图标",
         "BuffType": "叠加类型",
         "ShowOnlyOne": "只显示1层",
@@ -18,7 +19,7 @@
     },
     "ItemJsonData": {
         "Affix": "词缀",
-        "CanSale": "是否可出售(0或不填可出售，1不可出售)",
+        "CanSale": "是否可出售",
         "CanUse": "可用次数",
         "DanDu": "丹毒量",
         "FaBaoType": "法宝类型",

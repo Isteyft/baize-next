@@ -1,5 +1,7 @@
 import type { JsonRecord, JsonValue, ProjectMod, ProjectModGroupKey } from '@baize-next/types'
 
+import { withDefaultRecordData } from './defaultRecordTemplates'
+
 export type SkillBookSourceGroupKey = 'skill' | 'shenTong'
 
 export interface SkillBookGeneration {
@@ -51,21 +53,19 @@ export function createSkillBookGeneration(groupKey: SkillBookSourceGroupKey, sou
     const sourceAffix = isShenTong ? source.data.Affix2 : source.data.Affix
     const item: JsonRecord = {
         key: String(skillId),
-        data: {
+        data: withDefaultRecordData('item', {
             id: skillId,
             ItemIcon: isShenTong ? 3001 : 3002,
             maxNum: 1,
             name: source.data.name ?? '',
             Affix: copyArray(sourceAffix),
-            TuJianType: 0,
-            ShopType: 99,
             type: isShenTong ? 3 : 4,
             quality: source.data.Skill_LV ?? 0,
             typePinJie: source.data.typePinJie ?? 0,
             seid: [Number(seidId)],
             desc: descr,
             desc2: descr,
-        },
+        }),
     }
 
     return {

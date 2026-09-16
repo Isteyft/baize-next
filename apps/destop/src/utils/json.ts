@@ -1,4 +1,4 @@
-﻿import type {
+import type {
     JsonDataset,
     JsonRecord,
     JsonValue,
@@ -9,6 +9,8 @@
     ProjectSeidData,
     SeidDataKey,
 } from '@baize-next/types'
+
+import { normalizeRecordData } from './defaultRecordTemplates'
 
 /**
  * JSON 解析与项目结构工具。
@@ -1026,10 +1028,10 @@ function stringifyJson(value: JsonValue): string {
  * 将分组内的记录按原始顺序还原为 `{ key: data }` 映射。
  * @param records 分组内的记录。
  */
-function recordsToMap(records: JsonRecord[]): Record<string, JsonValue> {
+function recordsToMap(groupKey: ProjectModGroupKey, records: JsonRecord[]): Record<string, JsonValue> {
     const map: Record<string, JsonValue> = {}
     for (const record of records) {
-        map[record.key] = record.data
+        map[record.key] = normalizeRecordData(groupKey, record.data, record.key)
     }
     return map
 }
@@ -1095,14 +1097,17 @@ export function serializeProjectFiles(project: ProjectData): ProjectFileWrite[] 
             if (SINGLE_FILE_GROUPS.has(group.key)) {
                 const resolve = SINGLE_FILE_PATHS[group.key]
                 if (!resolve) continue
-                writes.push({ relativePath: resolve(mod.name), content: stringifyJson(recordsToMap(group.records)) })
+                writes.push({ relativePath: resolve(mod.name), content: stringifyJson(recordsToMap(group.key, group.records)) })
                 continue
             }
 
             const resolveRecord = GROUP_FILE_PATHS[group.key]
             if (!resolveRecord) continue
             for (const record of group.records) {
-                writes.push({ relativePath: resolveRecord(mod.name, record.key), content: stringifyJson(record.data) })
+                writes.push({
+                    relativePath: resolveRecord(mod.name, record.key),
+                    content: stringifyJson(normalizeRecordData(group.key, record.data, record.key)),
+                })
             }
         }
 

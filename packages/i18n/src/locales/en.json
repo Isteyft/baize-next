@@ -1,5 +1,6 @@
 {
     "BuffJsonData": {
+        "Affix": "Affix",
         "BuffIcon": "BuffIcon",
         "BuffType": "BuffType",
         "ShowOnlyOne": "ShowOnlyOne",

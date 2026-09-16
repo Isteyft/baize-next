@@ -14,6 +14,14 @@ describe('JsonEditor', () => {
         expect(onUpdate).toHaveBeenCalledWith('a', 'name', 'beta')
     })
 
+    it('renders schema fields that are missing from a partial item record', () => {
+        render(<JsonEditor groupKey="item" record={{ key: '1', data: { id: 1, name: 'Sword' } }} onUpdate={vi.fn()} />)
+
+        expect(screen.getByRole('textbox', { name: '刷新时间' })).toBeTruthy()
+        expect(screen.getByRole('textbox', { name: '最大堆叠数' })).toBeTruthy()
+        expect(screen.getByRole('textbox', { name: '法宝类型' })).toBeTruthy()
+        expect(screen.getByRole('textbox', { name: '价格' })).toBeTruthy()
+    })
     it('renders all description fields as multiline text fields', () => {
         const onUpdate = vi.fn()
         render(
@@ -179,12 +187,12 @@ describe('JsonEditor', () => {
             />
         )
 
-        const hideCheckbox = screen.getByRole('checkbox', { name: '是否隐藏（0不，1）' })
+        const hideCheckbox = screen.getByRole('checkbox', { name: '是否隐藏' })
         expect((hideCheckbox as HTMLInputElement).checked).toBe(true)
         fireEvent.click(hideCheckbox)
         expect(onUpdate).toHaveBeenCalledWith('1', 'isHide', 0)
 
-        const showOneCheckbox = screen.getByRole('checkbox', { name: '只显示1层（0/不填 正常显示 1 永远只显示一层）' })
+        const showOneCheckbox = screen.getByRole('checkbox', { name: '只显示1层' })
         expect((showOneCheckbox as HTMLInputElement).checked).toBe(false)
         fireEvent.click(showOneCheckbox)
         expect(onUpdate).toHaveBeenCalledWith('1', 'ShowOnlyOne', 1)
@@ -237,11 +245,11 @@ describe('JsonEditor', () => {
         )
 
         expect(screen.getByRole('button', { name: 'buff类型（1 负面buff）' })).toBeTruthy()
-        expect(screen.getByRole('button', { name: '叠加类型(0叠加,1覆盖,2增加，3放技能)（0 叠加）' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: '叠加类型（0 叠加）' })).toBeTruthy()
         expect(screen.getByRole('button', { name: '触发类型（1 回合结束时触发）' })).toBeTruthy()
         expect(screen.getByRole('button', { name: '移除类型（1 触发后移除一层）' })).toBeTruthy()
 
-        fireEvent.click(screen.getByRole('button', { name: '叠加类型(0叠加,1覆盖,2增加，3放技能)（0 叠加）' }))
+        fireEvent.click(screen.getByRole('button', { name: '叠加类型（0 叠加）' }))
         fireEvent.click(screen.getByText('1 覆盖'))
         expect(onUpdate).toHaveBeenCalledWith('1', 'BuffType', 1)
     })
@@ -268,7 +276,7 @@ describe('JsonEditor', () => {
             />
         )
 
-        const numberInput = screen.getByDisplayValue('1')
+        const numberInput = screen.getByRole('textbox', { name: 'id序列' })
         expect(numberInput.getAttribute('type')).toBe('text')
         expect(numberInput.getAttribute('inputmode')).toBe('decimal')
         fireEvent.change(numberInput, { target: { value: '7' } })
@@ -329,11 +337,11 @@ describe('JsonEditor', () => {
 
         expect(screen.getByRole('button', { name: '物品类型（5 丹药）' })).toBeTruthy()
         expect(screen.getByRole('button', { name: '物品品阶（1 一品（人阶））' })).toBeTruthy()
-        expect(screen.getByRole('button', { name: '物品品阶阶段（0无，1下品，2中品，3上品）（2 中品）' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: '物品品阶（2 中品）' })).toBeTruthy()
         expect(screen.getByRole('button', { name: '商品类型（1 坊市武器）' })).toBeTruthy()
-        expect(screen.getByRole('button', { name: '图鉴类型（1草药，2矿物，3妖兽材料，4丹药）（4 丹药）' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: '图鉴类型（4 丹药）' })).toBeTruthy()
 
-        fireEvent.click(screen.getByRole('button', { name: '物品品阶阶段（0无，1下品，2中品，3上品）（2 中品）' }))
+        fireEvent.click(screen.getByRole('button', { name: '物品品阶（2 中品）' }))
         fireEvent.click(screen.getByText('0 无'))
         expect(onUpdate).toHaveBeenCalledWith('1', 'typePinJie', 0)
     })
@@ -378,12 +386,12 @@ describe('JsonEditor', () => {
         const onUpdate = vi.fn()
         render(<JsonEditor groupKey="item" record={{ key: '1', data: { id: 1, CanSale: 0, NPCCanUse: 1 } }} onUpdate={onUpdate} />)
 
-        const canSale = screen.getByRole('checkbox', { name: '是否可出售(0或不填可出售，1不可出售)' })
+        const canSale = screen.getByRole('checkbox', { name: '是否可出售' })
         expect((canSale as HTMLInputElement).checked).toBe(true)
         fireEvent.click(canSale)
         expect(onUpdate).toHaveBeenCalledWith('1', 'CanSale', 1)
 
-        const npcCanUse = screen.getByRole('checkbox', { name: 'NPC是否能使用（0否，1是）' })
+        const npcCanUse = screen.getByRole('checkbox', { name: 'NPC是否能使用' })
         expect((npcCanUse as HTMLInputElement).checked).toBe(true)
         fireEvent.click(npcCanUse)
         expect(onUpdate).toHaveBeenCalledWith('1', 'NPCCanUse', 0)
@@ -399,14 +407,14 @@ describe('JsonEditor', () => {
             />
         )
 
-        const checkbox = screen.getByRole('checkbox', { name: '是否参加拍卖（0是，1否）' })
+        const checkbox = screen.getByRole('checkbox', { name: '是否参加拍卖' })
         expect((checkbox as HTMLInputElement).checked).toBe(true)
         fireEvent.click(checkbox)
         expect(onUpdate).toHaveBeenCalledWith('2', 'canjiaPaiMai', 1)
 
-        fireEvent.change(screen.getByDisplayValue('3'), { target: { value: '4' } })
+        fireEvent.change(screen.getByRole('textbox', { name: '攻击类型' }), { target: { value: '4' } })
         expect(onUpdate).toHaveBeenCalledWith('2', 'AttackType', 4)
-        fireEvent.change(screen.getByDisplayValue('10'), { target: { value: '11' } })
+        fireEvent.change(screen.getByRole('textbox', { name: '防御类型' }), { target: { value: '11' } })
         expect(onUpdate).toHaveBeenCalledWith('2', 'DefenseType', 11)
     })
 
@@ -497,10 +505,10 @@ describe('JsonEditor', () => {
         render(<JsonEditor groupKey="shenTong" record={{ key: '1', data: { AttackType: [0] } }} onUpdate={onUpdate} />)
 
         expect(screen.queryByRole('button', { name: /攻击类型/ })).toBeNull()
-        const numberInputs = screen.getAllByRole('textbox')
-        expect(numberInputs).toHaveLength(1)
-        expect(numberInputs.every(input => input.getAttribute('type') === 'text')).toBe(true)
-        fireEvent.change(numberInputs[0]!, { target: { value: '3' } })
+        const numberInput = screen.getByRole('textbox', { name: '攻击类型 1' })
+        expect(numberInput.getAttribute('type')).toBe('text')
+        expect(numberInput.getAttribute('inputmode')).toBe('decimal')
+        fireEvent.change(numberInput, { target: { value: '3' } })
         expect(onUpdate).toHaveBeenCalledWith('1', 'AttackType', [3])
     })
 
@@ -536,7 +544,7 @@ describe('JsonEditor', () => {
             />
         )
 
-        fireEvent.click(screen.getByRole('button', { name: '攻击脚本（SkillAttack 对方）' }))
+        fireEvent.click(screen.getByRole('button', { name: '攻击目标（SkillAttack 对方）' }))
         fireEvent.click(screen.getByText('SkillSelf 自身'))
         expect(onUpdate).toHaveBeenCalledWith('1', 'script', 'SkillSelf')
     })

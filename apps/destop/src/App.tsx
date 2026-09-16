@@ -23,6 +23,7 @@ import { TitleBar } from './components/TitleBar'
 import { appendErrorLog, resetErrorLog } from './errorLog'
 import { DEFAULT_META_PRELOAD_PATH, getSavedPreloadSettings, PRELOAD_MODE_OPTIONS } from './preload'
 import { subscribeTheme } from './theme'
+import { withDefaultRecordData } from './utils/defaultRecordTemplates'
 import {
     createDatasetId,
     mergeMetaDatasets,
@@ -524,7 +525,7 @@ export default function App() {
 
     function handleCreateRecord(recordKey: string, data: Record<string, JsonValue>): void {
         if (!selection) return
-        const nextRecord: JsonRecord = { key: recordKey, data }
+        const nextRecord: JsonRecord = { key: recordKey, data: withDefaultRecordData(selection.groupKey, data) }
 
         const createRecordInProject = (item: ProjectData): ProjectData =>
             updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>

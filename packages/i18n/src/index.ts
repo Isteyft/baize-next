@@ -1,211 +1,55 @@
 /**
- * ???? i18n ???
- * ? JSON ???????????????????????
+ * 字段表头 i18n 映射。
+ * 数据优先读取 zh-CN，缺失时再回退到英文或原始字段名。
  */
 
-/** ???????????? */
-const GROUP_FIELD_LABELS: Record<string, Record<string, string>> = {
-    config: {
-        Name: 'mod名称',
-        Author: '作者',
-        Version: '版本',
-        Description: '介绍',
-        Settings: '设置',
-    },
-    buff: {
-        Affix: '词缀（炼器）',
-        BuffIcon: '图标',
-        BuffType: '叠加类型(0叠加,1覆盖,2增加，3放技能)',
-        ShowOnlyOne: '只显示1层（0/不填 正常显示 1 永远只显示一层）',
-        buffid: 'id序列',
-        bufftype: 'buff类型',
-        descr: 'buff描述',
-        isHide: '是否隐藏（0不，1）',
-        looptime: 'buff循环时间',
-        name: 'buff名字',
-        removeTrigger: '移除类型',
-        script: 'buff脚本',
-        seid: 'buff特性id',
-        skillEffect: '特效',
-        totaltime: 'buff持续时间',
-        trigger: '触发类型',
-    },
-    item: {
-        Affix: '词缀',
-        CanSale: '是否可出售(0或不填可出售，1不可出售)',
-        CanUse: '可用次数',
-        DanDu: '丹毒量',
-        FaBaoType: '法宝类型',
-        ItemFlag: '物品标签',
-        ItemIcon: '图标',
-        NPCCanUse: 'NPC是否能使用（0否，1是）',
-        ShopType: '商品类型',
-        ShuXingType: '属性类别',
-        ShuaXin: '刷新时间',
-        StuTime: '领悟时间',
-        TuJianType: '图鉴类型（1草药，2矿物，3妖兽材料，4丹药）',
-        WuWeiType: '五维类别',
-        desc: '物品说明',
-        desc2: '物品描述',
-        id: 'id',
-        maxNum: '最大堆叠数',
-        name: '物品名',
-        price: '价格',
-        quality: '物品品阶',
-        seid: '物品拥有的特性',
-        type: '物品类型',
-        typePinJie: '物品品阶阶段（0无，1下品，2中品，3上品）',
-        vagueType: '大类型',
-        wuDao: '领悟前置条件(两个一组)',
-        yaoZhi1: '药引',
-        yaoZhi2: '主药',
-        yaoZhi3: '辅药',
-    },
-    skill: {
-        Affix: '词缀',
-        AttackType: '功法类型',
-        DF: '斗法可见',
-        Skill_ID: '功法编号',
-        Skill_LV: '技能等阶',
-        Skill_Lv: '功法层数',
-        Skill_Speed: '修炼速度',
-        Skill_castTime: '参悟时间',
-        TuJianType: '图鉴',
-        TuJiandescr: '功法描述-图鉴',
-        descr: '功法描述',
-        icon: '图标',
-        id: '编号',
-        name: '功法名',
-        qingjiaotype: '功法请教类型',
-        seid: '功法特性',
-        typePinJie: '功法技能品阶',
-    },
-    shenTong: {
-        Affix: '老词缀',
-        Affix2: '新词缀',
-        AttackType: '攻击类型',
-        CD: '冷却',
-        DF: '斗法可见',
-        HP: '基础伤害',
-        Skill_DisplayType: '释放方式（必须配0）',
-        Skill_ID: '技能编号',
-        Skill_LV: '技能等阶',
-        Skill_Lv: '技能等级',
-        Skill_Open: '开启境界',
-        Skill_Type: '技能释放优先级',
-        Skill_castTime: '参悟（月）',
-        TuJianType: '图鉴',
-        TuJiandescr: '技能描述-图鉴',
-        canUseDistMax: '攻击距离',
-        descr: '技能描述',
-        icon: '图标',
-        id: '编号',
-        name: '技能名',
-        qingjiaotype: '技能请教类型',
-        script: '攻击脚本',
-        seid: '技能特性',
-        skillEffect: '特效动画',
-        skill_Cast: '灵气消耗',
-        skill_CastType: '灵气消耗类型(0金1木2水3火4土5魔)',
-        skill_SameCastNum: '同系卡灵气消耗',
-        speed: '技能移动速度（必须配0）',
-        typePinJie: '功法技能品阶',
-    },
-    npcType: {
-        AttackType: '攻击类型',
-        AvatarType: '种族',
-        DefenseType: '防御类型',
-        FirstName: '姓',
-        HuaShenLingYu: '化神领域',
-        JinDanType: '金丹类型',
-        Level: 'NPC境界',
-        LingGen: '绑定灵根',
-        LiuPai: 'NPC流派',
-        MengPai: 'NPC势力',
-        NPCTag: '标签',
-        ShiLi: '战斗力区间',
-        Type: 'NPC类型',
-        XinQuType: '绑定感兴趣的物品',
-        canjiaPaiMai: '是否参加拍卖（0是，1否）',
-        equipClothing: '偏好防具属性',
-        equipRing: '偏好饰品属性',
-        equipWeapon: '偏好武器属性',
-        id: '流水号',
-        paimaifenzu: '拍卖分组',
-        skills: '绑定技能',
-        staticSkills: '绑定功法',
-        wudaoType: '绑定悟道类型',
-        yuanying: '元婴功法',
-    },
-    npcWuDao: {
-        Type: '悟道类型',
-        id: '流水号',
-        lv: '境界',
-        value1: '金',
-        value2: '木',
-        value3: '水',
-        value4: '火',
-        value5: '土',
-        value6: '神',
-        value7: '体',
-        value8: '剑',
-        value9: '气',
-        value10: '阵',
-        value11: '丹',
-        value12: '器',
-        value21: '魔',
-        wudaoID: '悟道神通',
-    },
-    wuDaoAllType: {
-        id: '悟道类型ID',
-        name: '简称',
-        name1: '名称',
-    },
-    wuDao: {
-        id: '悟道ID',
-        icon: '图标',
-        name: '悟道名称',
-        Cast: '参悟消耗',
-        Type: '悟道类型',
-        Lv: '悟道等级',
-        seid: '特性ID',
-        desc: '描述',
-        xiaoguo: '效果',
-        CanForget: '可遗忘',
-    },
-    tuJianChunWenBen: {
-        id: '词缀条目ID',
-        name1: '词缀项目值',
-        typenum: '词缀项目',
-        type: '指示物',
-        name2: '名称',
-        descr: '描述',
-    },
+import en from './locales/en.json'
+import zhCN from './locales/zh-CN.json'
+
+/** 当前支持的界面语言。 */
+export type LocaleCode = 'zh-CN' | 'en'
+
+type LocaleMessages = typeof zhCN
+
+/** 应用内分组键与 locale JSON 数据集名称的映射。 */
+const GROUP_KEY_ALIASES = {
+    config: 'ModConfig',
+    buff: 'BuffJsonData',
+    item: 'ItemJsonData',
+    skill: 'StaticSkillJsonData',
+    shenTong: 'SkillJsonData',
+    npcType: 'NPCLeiXingDate',
+    npcWuDao: 'NPCWuDaoJson',
+    wuDaoAllType: 'WuDaoAllTypeJson',
+    wuDao: 'WuDaoJson',
+    tuJianChunWenBen: 'TuJianChunWenBen',
+} as const
+
+function resolveGroupKey(groupKey: string): string {
+    return GROUP_KEY_ALIASES[groupKey as keyof typeof GROUP_KEY_ALIASES] ?? groupKey
 }
 
-/** ??????? */
-const COMMON_FIELD_LABELS: Record<string, string> = {
-    id: 'ID',
-    name: '??',
-    descr: '??',
-    descr2: '??2',
-    desc: '??',
-    type: '??',
-    price: '??',
-    quality: '??',
-    icon: '??',
-    seid: 'SEID',
-    Affix: '??',
+function getLocaleLabel(locale: LocaleMessages, groupKey: string, field: string): string | undefined {
+    const group = locale[groupKey as keyof LocaleMessages] as Record<string, string> | undefined
+    return group?.[field]
 }
 
 /**
- * ?????????????????
- * @param groupKey ??????
- * @param field ??????
- * @returns ?????
+ * 获取数据分组对应的字段表头。
+ * 默认优先使用简体中文，中文缺失时再使用英文，最后原样返回字段名。
+ * @param groupKey 数据分组键。
+ * @param field 原始字段名。
+ * @param locale 期望语言，默认简体中文。
+ * @returns 字段表头文案。
  */
-export function translateField(groupKey: string, field: string): string {
-    const groupLabels = GROUP_FIELD_LABELS[groupKey] ?? {}
-    const label = groupLabels[field] ?? COMMON_FIELD_LABELS[field] ?? field
-    return label
+export function translateField(groupKey: string, field: string, locale: LocaleCode = 'zh-CN'): string {
+    const resolvedGroupKey = resolveGroupKey(groupKey)
+    const locales = locale === 'en' ? [en, zhCN] : [zhCN, en]
+
+    for (const messages of locales) {
+        const label = getLocaleLabel(messages, resolvedGroupKey, field)
+        if (label) return label
+    }
+
+    return field
 }
