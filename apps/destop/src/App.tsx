@@ -42,6 +42,7 @@ import {
     type SelectionSource,
 } from './utils/projectSession'
 import type { SeidDrawerRecords } from './utils/seid'
+import { appendSkillBookToMod, isSkillBookSourceGroup } from './utils/skillBook'
 
 const PRELOAD_FAILED_LABEL = '\u9884\u52a0\u8f7d\u5931\u8d25'
 const SAVED_TEXT = '\u5df2\u4fdd\u5b58'
@@ -540,6 +541,35 @@ export default function App() {
         setSelectedRecordKeys([recordKey])
     }
 
+    function handleGenerateSkillBook(recordKey: string): void {
+        if (!selection || !isSkillBookSourceGroup(selection.groupKey) || !selectedMod) return
+
+        const result = appendSkillBookToMod(selectedMod, selection.groupKey, recordKey)
+        if (!result.ok) {
+            const message =
+                result.reason === 'missing-skill-id'
+                    ? '当前记录缺少 Skill_ID，无法生成技能书'
+                    : result.reason === 'item-id-exists'
+                      ? `物品 ID ${result.skillId ?? ''} 已存在，未覆盖`
+                      : '未找到可生成技能书的功法或神通记录'
+            setTip({ message: message.trim(), tone: 'error' })
+            return
+        }
+
+        const replaceMod = (item: ProjectData): ProjectData => ({
+            ...item,
+            mods: item.mods.map(mod => (mod.id === selection.modId ? result.mod : mod)),
+        })
+
+        if (selection.kind === 'preload') {
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? replaceMod(item) : item)))
+        } else {
+            markProjectDirty(selection.projectId)
+            setProjects(previous => previous.map(item => (item.id === selection.projectId ? replaceMod(item) : item)))
+        }
+        setTip({ message: `已生成技能书：${String(result.item.data.name ?? result.skillId)}`, tone: 'success' })
+    }
+
     function handleDeleteRecords(recordKeys: string[]): void {
         if (!selection || recordKeys.length === 0) return
         const keySet = new Set(recordKeys)
@@ -723,6 +753,7 @@ export default function App() {
                     onSelect={setSelectedRecordKey}
                     onSelectionChange={setSelectedRecordKeys}
                     onCreateRecord={handleCreateRecord}
+                    onGenerateSkillBook={handleGenerateSkillBook}
                     onDeleteRecords={handleDeleteRecords}
                     metaDatasets={metaDatasets}
                     wuDaoTypeRecords={wuDaoTypeRecords}

@@ -50,6 +50,8 @@ interface DataTableProps {
     onSelectionChange?: (keys: string[]) => void
     /** 新增具有指定主键的数据条目。 */
     onCreateRecord?: (key: string, data: Record<string, JsonValue>) => void
+    /** 从当前功法或神通记录生成技能书物品。 */
+    onGenerateSkillBook?: (recordKey: string) => void
     /** 删除指定记录。 */
     onDeleteRecords?: (keys: string[]) => void
     /** 已预加载的 meta 数据集，用于把枚举字段渲染为描述文本。 */
@@ -354,6 +356,7 @@ export function DataTable({
     onSelect,
     onSelectionChange,
     onCreateRecord,
+    onGenerateSkillBook,
     onDeleteRecords,
     metaDatasets = [],
     wuDaoTypeRecords = [],
@@ -555,6 +558,12 @@ export function DataTable({
         setIdConflict(result.conflictKey)
     }
 
+    function handleGenerateSkillBook(recordKey: string): void {
+        if (!onGenerateSkillBook) return
+        setContextMenu(null)
+        onGenerateSkillBook(recordKey)
+    }
+
     function confirmDelete(): void {
         if (!deleteKeys || !onDeleteRecords) return
         onDeleteRecords(deleteKeys)
@@ -668,6 +677,16 @@ export function DataTable({
                         style={{ left: contextMenu.x, top: contextMenu.y }}
                         className="fixed z-[91] min-w-32 overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-xl"
                     >
+                        {(groupKey === 'skill' || groupKey === 'shenTong') && onGenerateSkillBook && contextMenu.keys.length === 1 ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => handleGenerateSkillBook(contextMenu.keys[0]!)}
+                                className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
+                            >
+                                生成技能书
+                            </button>
+                        ) : null}
                         {batchRealmField && onCreateRecord && contextMenu.keys.length === 1 ? (
                             <button
                                 type="button"

@@ -214,6 +214,42 @@ describe('DataTable', () => {
         ])
     })
 
+    it.each(['skill', 'shenTong'] as const)('generates a skill book from a %s row context menu', groupKey => {
+        const onGenerateSkillBook = vi.fn()
+        render(
+            <DataTable
+                groupKey={groupKey}
+                records={[{ key: '1', data: { id: 1, Skill_ID: 9, name: 'Source skill', descr: 'Description' } }]}
+                selectedKey="1"
+                selectedKeys={['1']}
+                onSelect={vi.fn()}
+                onGenerateSkillBook={onGenerateSkillBook}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('1'))
+        fireEvent.click(screen.getByRole('menuitem', { name: '生成技能书' }))
+
+        expect(onGenerateSkillBook).toHaveBeenCalledWith('1')
+        expect(screen.queryByRole('menu')).toBeNull()
+    })
+
+    it('does not show skill book generation outside skill and shenTong groups', () => {
+        render(
+            <DataTable
+                groupKey="item"
+                records={[{ key: '1', data: { id: 1, name: 'Item' } }]}
+                selectedKey="1"
+                selectedKeys={['1']}
+                onSelect={vi.fn()}
+                onGenerateSkillBook={vi.fn()}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('1'))
+
+        expect(screen.queryByRole('menuitem', { name: '生成技能书' })).toBeNull()
+    })
     it('supports shift selection across the visible rows', () => {
         const onSelectionChange = vi.fn()
         const onSelect = vi.fn()
