@@ -17,6 +17,7 @@ import {
     getShenTongSkillSelectOptions,
     isRecordMap,
     isRecordObject,
+    mergeMetaDatasets,
     META_DATASET_NAMES,
     parseJsonContent,
     parseMetaJsonEntry,
@@ -144,6 +145,34 @@ describe('project JSON mapping', () => {
 
         expect(dataset.name).toBe('example')
         expect(dataset.records[0]?.key).toBe('one')
+    })
+
+    it('merges same-name meta datasets and lets later records override duplicate business ids', () => {
+        const datasets = [
+            parseMetaJsonEntry({
+                relativePath: 'base/Data/Meta/AttackType.json',
+                content: '[{"Id":0,"Desc":"old"},{"Id":1,"Desc":"melee"}]',
+            }),
+            parseMetaJsonEntry({
+                relativePath: 'patch/Data/Meta/AttackType.json',
+                content: '[{"Id":0,"Desc":"new"},{"Id":2,"Desc":"ranged"}]',
+            }),
+            parseMetaJsonEntry({
+                relativePath: 'patch/Data/Meta/BuffType.json',
+                content: '[{"TypeID":1,"TypeName":"buff"}]',
+            }),
+        ]
+
+        const merged = mergeMetaDatasets(datasets)
+
+        expect(merged.map(dataset => dataset.name)).toEqual(['AttackType', 'BuffType'])
+        expect(merged[0]?.id).toBe(datasets[0]?.id)
+        expect(merged[0]?.records.map(record => record.data)).toEqual([
+            { Id: 0, Desc: 'new' },
+            { Id: 1, Desc: 'melee' },
+            { Id: 2, Desc: 'ranged' },
+        ])
+        expect(datasets[0]?.records).toHaveLength(2)
     })
 
     it('builds affix meta enum options from preloaded datasets', () => {

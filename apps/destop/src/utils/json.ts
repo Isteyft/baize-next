@@ -934,6 +934,56 @@ export function parseMetaEntriesFromEntries(entries: ProjectFileEntry[]): JsonDa
     return entries.map(entry => parseMetaJsonEntry(entry))
 }
 
+/** 读取 Meta 记录用于跨来源合并的业务 ID。 */
+function getMetaRecordIdentity(data: Record<string, JsonValue>): string | null {
+    for (const field of META_ID_FIELDS) {
+        const value = data[field]
+        if (typeof value === 'number') return String(value)
+    }
+    for (const field of META_STRING_ID_FIELDS) {
+        const value = data[field]
+        if (typeof value === 'string') return value
+    }
+    return null
+}
+
+/**
+ * 合并多个 Meta 来源中同名的数据集。
+ * 数据集按首次出现顺序保留，记录按业务 ID 去重；同名记录由后加载的数据覆盖，
+ * 无法识别业务 ID 的记录全部保留。
+ */
+export function mergeMetaDatasets(datasets: JsonDataset[]): JsonDataset[] {
+    const mergedDatasets = new Map<string, JsonDataset>()
+
+    for (const dataset of datasets) {
+        const existing = mergedDatasets.get(dataset.name)
+        if (!existing) {
+            mergedDatasets.set(dataset.name, { ...dataset, records: [...dataset.records] })
+            continue
+        }
+
+        const recordIndexes = new Map<string, number>()
+        existing.records.forEach((record, index) => {
+            const identity = getMetaRecordIdentity(record.data)
+            if (identity !== null) recordIndexes.set(identity, index)
+        })
+        const records = [...existing.records]
+        for (const record of dataset.records) {
+            const identity = getMetaRecordIdentity(record.data)
+            const existingIndex = identity === null ? undefined : recordIndexes.get(identity)
+            if (existingIndex === undefined) {
+                if (identity !== null) recordIndexes.set(identity, records.length)
+                records.push(record)
+            } else {
+                records[existingIndex] = record
+            }
+        }
+        mergedDatasets.set(dataset.name, { ...existing, records })
+    }
+
+    return [...mergedDatasets.values()]
+}
+
 /** 将 mod 预加载目录解析为项目结构。 */
 export async function parseModPreloadFromEntries(rootPath: string, entries: ProjectFileEntry[]): Promise<ProjectData> {
     return parseProjectFromEntries(rootPath, entries)

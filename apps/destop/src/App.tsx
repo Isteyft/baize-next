@@ -25,6 +25,7 @@ import { DEFAULT_META_PRELOAD_PATH, getSavedPreloadSettings, PRELOAD_MODE_OPTION
 import { subscribeTheme } from './theme'
 import {
     createDatasetId,
+    mergeMetaDatasets,
     parseMetaEntriesFromEntries,
     parseModPreloadFromEntries,
     parseModPreloadJsonEntry,
@@ -267,7 +268,7 @@ export default function App() {
                       .find(mod => mod.id === firstSelection.modId)
                       ?.groups.find(group => group.key === firstSelection.groupKey) ?? null)
                 : null
-            setMetaDatasets(loadedMeta)
+            setMetaDatasets(mergeMetaDatasets(loadedMeta))
             setModRootPaths(preloadRootPaths)
             setPreloadProjects(loadedProjects)
             setActivePreloadProjectId(firstProject?.id ?? null)
