@@ -38,7 +38,18 @@ export type SeidFileData = Record<string, Record<string, Record<string, JsonValu
 export type ProjectSeidData = Partial<Record<SeidDataKey, SeidFileData>>
 
 /** mod 下可识别的数据分组键。 */
-export type ProjectModGroupKey = 'config' | 'buff' | 'item' | 'skill' | 'shenTong' | 'npcType' | 'npcWuDao' | 'tuJianChunWenBen' | 'preload'
+export type ProjectModGroupKey =
+    | 'config'
+    | 'buff'
+    | 'item'
+    | 'skill'
+    | 'shenTong'
+    | 'npcType'
+    | 'npcWuDao'
+    | 'wuDaoAllType'
+    | 'wuDao'
+    | 'tuJianChunWenBen'
+    | 'preload'
 
 /** mod 下的一个数据分组。 */
 export interface ProjectModGroup {

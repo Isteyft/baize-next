@@ -150,6 +150,8 @@ export default function App() {
     const affixRecords = collectGroupRecordsFromProjects(referenceProjects, 'tuJianChunWenBen')
     const shenTongRecords = collectGroupRecordsFromProjects(referenceProjects, 'shenTong')
     const skillRecords = collectGroupRecordsFromProjects(referenceProjects, 'skill')
+    const wuDaoTypeRecords = collectGroupRecordsFromProjects(referenceProjects, 'wuDaoAllType')
+    const wuDaoRecords = collectGroupRecordsFromProjects(referenceProjects, 'wuDao')
     const seidDrawerRecords: SeidDrawerRecords = {
         buff: collectGroupRecordsFromProjects(referenceProjects, 'buff'),
         skill: collectGroupRecordsFromProjects(referenceProjects, 'shenTong'),
@@ -723,6 +725,7 @@ export default function App() {
                     onCreateRecord={handleCreateRecord}
                     onDeleteRecords={handleDeleteRecords}
                     metaDatasets={metaDatasets}
+                    wuDaoTypeRecords={wuDaoTypeRecords}
                     modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}
                     readAsset={readAsset}
                 />
@@ -733,6 +736,8 @@ export default function App() {
                     affixRecords={affixRecords}
                     shenTongRecords={shenTongRecords}
                     skillRecords={skillRecords}
+                    wuDaoTypeRecords={wuDaoTypeRecords}
+                    wuDaoRecords={wuDaoRecords}
                     modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}
                     readAsset={readAsset}
                     seidData={selectedMod?.seidData ?? {}}

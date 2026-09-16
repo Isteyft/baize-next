@@ -324,6 +324,28 @@ describe('DataTable', () => {
         expect(formatCellText(null, 'type', 0, metaDatasets)).toBe('0')
     })
 
+    it('shows wuDao Type names from WuDaoAllType records without an icon column', () => {
+        const readAsset = vi.fn().mockResolvedValue('data:image/png;base64,AAAA')
+        const { container } = render(
+            <DataTable
+                groupKey="wuDao"
+                records={[{ key: '101', data: { id: 101, icon: '101', name: '御金', Lv: 1, Type: [1, 2] } }]}
+                wuDaoTypeRecords={[
+                    { key: '1', data: { id: 1, name: '金', name1: '金之道' } },
+                    { key: '2', data: { id: 2, name: '木', name1: '木之道' } },
+                ]}
+                selectedKey="101"
+                onSelect={vi.fn()}
+                modDirectory="plugins/Next/_/modDemo"
+                readAsset={readAsset}
+            />
+        )
+
+        expect(screen.getByText('金、木')).toBeTruthy()
+        expect(screen.queryByText('图标')).toBeNull()
+        expect(readAsset).not.toHaveBeenCalled()
+        expect(container.querySelectorAll('thead tr:first-child th')).toHaveLength(4)
+    })
     it('loads and displays row icons from the mod asset directory', async () => {
         const readAsset = vi.fn().mockResolvedValue('data:image/png;base64,AAAA')
         render(

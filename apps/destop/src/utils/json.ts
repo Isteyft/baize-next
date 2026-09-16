@@ -23,6 +23,8 @@ export const PROJECT_GROUP_DEFS: { key: ProjectModGroupKey; label: string }[] = 
     { key: 'shenTong', label: '神通' },
     { key: 'npcType', label: 'NPC类型' },
     { key: 'npcWuDao', label: 'NPC悟道' },
+    { key: 'wuDaoAllType', label: '悟道类型' },
+    { key: 'wuDao', label: '悟道' },
     { key: 'tuJianChunWenBen', label: '词缀数据' },
 ]
 
@@ -527,6 +529,7 @@ export const GROUP_ICON_FIELDS: Partial<Record<ProjectModGroupKey, string>> = {
     item: 'ItemIcon',
     shenTong: 'icon',
     skill: 'icon',
+    wuDao: 'icon',
 }
 
 /** 各分组图标在 Assets 下的子目录。 */
@@ -535,6 +538,7 @@ const GROUP_ICON_DIRECTORIES: Partial<Record<ProjectModGroupKey, string>> = {
     item: 'item icon',
     shenTong: 'skill icon',
     skill: 'staticskill icon',
+    wuDao: 'wudao icon',
 }
 
 /** 功法与神通在 icon 为 0 时使用 Skill_ID 作为图标名。 */
@@ -768,6 +772,8 @@ function matchProjectFile(parts: string[]): ProjectFileMatch | null {
     if (rest[1] === 'StaticSkillJsonData.json') return { modName, modDirectory, groupKey: 'skill' }
     if (rest[1] === 'NPCLeiXingDate.json') return { modName, modDirectory, groupKey: 'npcType' }
     if (rest[1] === 'NPCWuDaoJson.json') return { modName, modDirectory, groupKey: 'npcWuDao' }
+    if (rest[1] === 'WuDaoAllTypeJson.json') return { modName, modDirectory, groupKey: 'wuDaoAllType' }
+    if (rest[1] === 'WuDaoJson.json') return { modName, modDirectory, groupKey: 'wuDao' }
     if (rest[1] === 'TuJianChunWenBen.json') return { modName, modDirectory, groupKey: 'tuJianChunWenBen' }
     return null
 }
@@ -882,6 +888,8 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
                 def.key === 'skill' ||
                 def.key === 'npcType' ||
                 def.key === 'npcWuDao' ||
+                def.key === 'wuDaoAllType' ||
+                def.key === 'wuDao' ||
                 def.key === 'tuJianChunWenBen'
             ) {
                 for (const entry of bucket) {
@@ -1026,8 +1034,16 @@ function recordsToMap(records: JsonRecord[]): Record<string, JsonValue> {
     return map
 }
 
-/** 单个文件承载全部分组数据的分组（config/skill/npcType/npcWuDao/tuJianChunWenBen）。 */
-const SINGLE_FILE_GROUPS = new Set<ProjectModGroupKey>(['config', 'skill', 'npcType', 'npcWuDao', 'tuJianChunWenBen'])
+/** 单个文件承载全部分组数据的分组（config/skill/npcType/npcWuDao/wuDaoAllType/wuDao/tuJianChunWenBen）。 */
+const SINGLE_FILE_GROUPS = new Set<ProjectModGroupKey>([
+    'config',
+    'skill',
+    'npcType',
+    'npcWuDao',
+    'wuDaoAllType',
+    'wuDao',
+    'tuJianChunWenBen',
+])
 
 /** 每个分组的原始文件位置，用于将编辑结果写回原文件。 */
 function modDirectoryName(modName: string): string {
@@ -1052,6 +1068,8 @@ const SINGLE_FILE_PATHS: Partial<Record<ProjectModGroupKey, (modName: string) =>
     skill: modName => `plugins/Next/_/${modDirectoryName(modName)}/Data/StaticSkillJsonData.json`,
     npcType: modName => `plugins/Next/_/${modDirectoryName(modName)}/Data/NPCLeiXingDate.json`,
     npcWuDao: modName => `plugins/Next/_/${modDirectoryName(modName)}/Data/NPCWuDaoJson.json`,
+    wuDaoAllType: modName => `plugins/Next/_/${modDirectoryName(modName)}/Data/WuDaoAllTypeJson.json`,
+    wuDao: modName => `plugins/Next/_/${modDirectoryName(modName)}/Data/WuDaoJson.json`,
     tuJianChunWenBen: modName => `plugins/Next/_/${modDirectoryName(modName)}/Data/TuJianChunWenBen.json`,
 }
 

@@ -34,6 +34,10 @@ interface JsonEditorProps {
     shenTongRecords?: JsonRecord[]
     /** 当前已加载的功法记录，供 NPC 功法绑定选择。 */
     skillRecords?: JsonRecord[]
+    /** 当前已加载的悟道类型记录，供悟道的 Type 字段多选。 */
+    wuDaoTypeRecords?: JsonRecord[]
+    /** 当前已加载的悟道记录，供 NPC 悟道的悟道神通字段多选。 */
+    wuDaoRecords?: JsonRecord[]
     /** 当前 mod 文件夹相对项目根目录的路径，用于解析 Assets 下的图标。 */
     modDirectory?: string | null
     /** 读取 mod 资源并返回可展示的 data URL。 */
@@ -344,21 +348,64 @@ function numericIds(value: JsonValue): number[] {
     return value.filter((item): item is number => typeof item === 'number')
 }
 
+function parseNumericIdsText(text: string): number[] {
+    const result: number[] = []
+    const seen = new Set<number>()
+    for (const part of text.split(/[,，]/)) {
+        const trimmed = part.trim()
+        if (!trimmed) continue
+        const value = Number(trimmed)
+        if (!Number.isFinite(value) || seen.has(value)) continue
+        seen.add(value)
+        result.push(value)
+    }
+    return result
+}
+
+function selectedOptionLabels(value: JsonValue, options: { id: number; label: string }[]): string {
+    const ids = Array.isArray(value) ? numericIds(value) : typeof value === 'number' ? [value] : []
+    if (ids.length === 0) return '未选择'
+    return ids.map(id => options.find(option => option.id === id)?.label ?? String(id)).join('、')
+}
+
+function SelectionInfo({ label, content }: { label: string; content: string }) {
+    return (
+        <span className="group relative inline-flex">
+            <span
+                tabIndex={0}
+                aria-label={`查看${label}已选内容`}
+                className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line-strong text-[10px] font-semibold text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+                ?
+            </span>
+            <span
+                role="tooltip"
+                className="pointer-events-none absolute left-0 top-full z-[110] mt-1 w-64 whitespace-pre-line break-words rounded-md border border-line-strong bg-raised px-3 py-2 text-xs text-ink-soft opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+            >
+                {content}
+            </span>
+        </span>
+    )
+}
+
 function JsonMultiSelectDialog({
     value,
     options,
     label,
     optionColumnLabel = '名称',
+    quickEdit = false,
     onChange,
 }: {
     value: JsonValue
     options: { value: string; id: number; label: string }[]
     label: string
     optionColumnLabel?: string
+    quickEdit?: boolean
     onChange: (value: JsonValue) => void
 }) {
     const [open, setOpen] = useState(false)
     const [query, setQuery] = useState('')
+    const [draft, setDraft] = useState(() => numericIds(value).join(','))
     const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set(numericIds(value)))
     const currentIds = numericIds(value)
     const keyword = query.trim().toLowerCase()
@@ -367,14 +414,19 @@ function JsonMultiSelectDialog({
     const allChecked = options.length > 0 && options.every(option => selectedIds.has(option.id))
 
     useEffect(() => {
+        const ids = numericIds(value)
+        setSelectedIds(new Set(ids))
+        setDraft(ids.join(','))
+    }, [value])
+
+    useEffect(() => {
         if (!open) return
-        setSelectedIds(new Set(numericIds(value)))
         function handleKeyDown(event: KeyboardEvent): void {
             if (event.key === 'Escape') setOpen(false)
         }
         document.addEventListener('keydown', handleKeyDown)
         return () => document.removeEventListener('keydown', handleKeyDown)
-    }, [open, value])
+    }, [open])
 
     function toggle(id: number): void {
         setSelectedIds(previous => {
@@ -407,6 +459,12 @@ function JsonMultiSelectDialog({
         setOpen(false)
     }
 
+    function commitQuickEdit(): void {
+        const next = parseNumericIdsText(draft)
+        setDraft(next.join(','))
+        onChange(next)
+    }
+
     const summary =
         selectedIds.size > 0
             ? `${selectedIds.size} 项：${currentOptions
@@ -428,6 +486,25 @@ function JsonMultiSelectDialog({
                     选择
                 </span>
             </button>
+            {quickEdit ? (
+                <input
+                    type="text"
+                    aria-label={`快速编辑${label}`}
+                    value={draft}
+                    placeholder="用逗号分隔 ID"
+                    onChange={event => setDraft(event.target.value)}
+                    onBlur={commitQuickEdit}
+                    onKeyDown={event => {
+                        if (event.key === 'Enter') {
+                            event.preventDefault()
+                            event.currentTarget.blur()
+                        } else if (event.key === 'Escape') {
+                            setDraft(numericIds(value).join(','))
+                        }
+                    }}
+                    className={`${inputClass} mt-2 font-mono text-xs`}
+                />
+            ) : null}
             {open ? (
                 <div
                     className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
@@ -543,7 +620,7 @@ function JsonMultiSelectDialog({
     )
 }
 
-function JsonRecordSingleSelect({
+function JsonRecordSingleSelectDialog({
     value,
     options,
     label,
@@ -555,18 +632,150 @@ function JsonRecordSingleSelect({
     onChange: (value: JsonValue) => void
 }) {
     const current = typeof value === 'number' && Number.isFinite(value) ? value : 0
-    const selectOptions = [{ value: '0', label: '0 无' }, ...options.map(option => ({ value: option.value, label: option.label }))]
-    if (!selectOptions.some(option => option.value === String(current))) {
-        selectOptions.unshift({ value: String(current), label: String(current) })
+    const [open, setOpen] = useState(false)
+    const [query, setQuery] = useState('')
+    const [selectedId, setSelectedId] = useState(current)
+    const selectOptions = [...(options.some(option => option.id === 0) ? options : [{ value: '0', id: 0, label: '0 无' }, ...options])]
+    if (!selectOptions.some(option => option.id === current)) {
+        selectOptions.unshift({ value: String(current), id: current, label: String(current) })
     }
+    const selectedOption = selectOptions.find(option => option.id === current)
+    const pendingOption = selectOptions.find(option => option.id === selectedId)
+    const keyword = query.trim().toLowerCase()
+    const filtered = keyword ? selectOptions.filter(option => option.label.toLowerCase().includes(keyword)) : selectOptions
+
+    useEffect(() => {
+        setSelectedId(current)
+    }, [current, value])
+
+    useEffect(() => {
+        if (!open) return
+        function handleKeyDown(event: KeyboardEvent): void {
+            if (event.key === 'Escape') setOpen(false)
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [open])
+
+    function commit(): void {
+        onChange(selectedId)
+        setOpen(false)
+    }
+
     return (
-        <Select
-            value={String(current)}
-            options={selectOptions}
-            onChange={next => onChange(Number(next))}
-            aria-label={label}
-            className="w-full"
-        />
+        <>
+            <button
+                type="button"
+                aria-label={label}
+                onClick={() => setOpen(true)}
+                className="flex min-h-9 w-full items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-hover focus:outline-none"
+            >
+                <span className="truncate">{selectedOption?.label ?? String(current)}</span>
+                <span aria-hidden="true" className="shrink-0 text-ink-muted">
+                    选择
+                </span>
+            </button>
+            {open ? (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setOpen(false)
+                    }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={label}
+                        className="flex max-h-[78vh] w-[min(820px,calc(100vw-32px))] flex-col overflow-hidden rounded-md border border-line-strong bg-base shadow-2xl"
+                    >
+                        <header className="flex shrink-0 items-center justify-between border-b border-line bg-panel px-4 py-3">
+                            <h2 className="min-w-0 truncate text-sm font-medium text-ink-soft">{label}</h2>
+                            <button
+                                type="button"
+                                aria-label="关闭"
+                                onClick={() => setOpen(false)}
+                                className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm text-ink-muted transition-colors hover:bg-hover hover:text-ink"
+                            >
+                                X
+                            </button>
+                        </header>
+                        <div className="shrink-0 border-b border-line bg-panel p-3">
+                            <input
+                                type="search"
+                                aria-label={`搜索${label}`}
+                                value={query}
+                                onChange={event => setQuery(event.target.value)}
+                                placeholder="搜索 id / 名称"
+                                className={inputClass}
+                            />
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-auto bg-panel">
+                            {filtered.length === 0 ? (
+                                <p className="px-4 py-8 text-center text-sm text-ink-subtle">没有匹配项</p>
+                            ) : (
+                                <table className="w-full border-collapse text-left text-sm">
+                                    <thead className="sticky top-0 bg-raised text-ink-muted">
+                                        <tr>
+                                            <th className="w-14 border-b border-line-strong px-3 py-2 text-xs font-medium">选择</th>
+                                            <th className="w-32 border-b border-line-strong px-3 py-2 text-xs font-medium">ID</th>
+                                            <th className="border-b border-line-strong px-3 py-2 text-xs font-medium">名称</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filtered.map(option => (
+                                            <tr
+                                                key={option.value}
+                                                onClick={() => setSelectedId(option.id)}
+                                                className={`cursor-pointer border-b border-line transition-colors ${
+                                                    selectedId === option.id ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-raised'
+                                                }`}
+                                            >
+                                                <td className="px-3 py-2">
+                                                    <input
+                                                        type="radio"
+                                                        name={`single-select-${label}`}
+                                                        aria-label={`选择 ${option.label}`}
+                                                        checked={selectedId === option.id}
+                                                        onClick={event => event.stopPropagation()}
+                                                        onChange={() => setSelectedId(option.id)}
+                                                        className="h-4 w-4 accent-accent"
+                                                    />
+                                                </td>
+                                                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{option.id}</td>
+                                                <td className="px-3 py-2">
+                                                    {option.label.startsWith(`${option.id} `)
+                                                        ? option.label.slice(String(option.id).length + 1)
+                                                        : option.label}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-panel px-4 py-3">
+                            <span className="text-xs text-ink-subtle">已选择 {pendingOption?.label ?? String(selectedId)}</span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setOpen(false)}
+                                    className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft transition-colors hover:bg-hover hover:text-ink"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={commit}
+                                    className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover"
+                                >
+                                    确定
+                                </button>
+                            </div>
+                        </footer>
+                    </div>
+                </div>
+            ) : null}
+        </>
     )
 }
 
@@ -603,6 +812,8 @@ export function JsonEditor({
     affixRecords = [],
     shenTongRecords = [],
     skillRecords = [],
+    wuDaoTypeRecords = [],
+    wuDaoRecords = [],
     modDirectory = null,
     readAsset,
     seidData = {},
@@ -623,6 +834,10 @@ export function JsonEditor({
         record && modDirectory && hasModIcon(groupKey, record.data) ? resolveModIconPath(modDirectory, groupKey, record.data) : null
     const shenTongOptions = useMemo(() => getShenTongSkillSelectOptions(shenTongRecords), [shenTongRecords])
     const skillOptions = useMemo(() => getRecordSelectOptions(skillRecords), [skillRecords])
+    const wuDaoTypeOptions = useMemo(() => getRecordSelectOptions(wuDaoTypeRecords), [wuDaoTypeRecords])
+    const wuDaoOptions = useMemo(() => getRecordSelectOptions(wuDaoRecords), [wuDaoRecords])
+    const yuanyingOptions = useMemo(() => [{ value: '0', id: 0, label: '0 无' }, ...skillOptions], [skillOptions])
+    const affixOptions = useMemo(() => getAffixSelectOptions(affixRecords), [affixRecords])
     const seidGroupKey = record && groupKey && isSeidProjectGroup(groupKey) ? groupKey : null
     if (record && seidGroupKey && !fields.includes('seid')) fields.push('seid')
 
@@ -660,8 +875,9 @@ export function JsonEditor({
                 </button>
             )
         } else if (isAffixField && Array.isArray(value)) {
-            const options = getAffixSelectOptions(affixRecords)
-            control = <AffixSelect value={value} options={options} label={label} onCommit={next => onUpdate(record.key, field, next)} />
+            control = (
+                <AffixSelect value={value} options={affixOptions} label={label} onCommit={next => onUpdate(record.key, field, next)} />
+            )
         } else if (isFlagField) {
             control = (
                 <JsonFlagInput
@@ -687,6 +903,7 @@ export function JsonEditor({
                     value={value}
                     options={shenTongOptions}
                     label={label}
+                    quickEdit
                     onChange={next => onUpdate(record.key, field, next)}
                 />
             )
@@ -696,15 +913,37 @@ export function JsonEditor({
                     value={value}
                     options={skillOptions}
                     label={label}
+                    quickEdit
                     onChange={next => onUpdate(record.key, field, next)}
                 />
             )
         } else if (groupKey === 'npcType' && field === 'yuanying') {
             control = (
-                <JsonRecordSingleSelect
+                <JsonRecordSingleSelectDialog
                     value={value}
-                    options={skillOptions}
+                    options={yuanyingOptions}
                     label={label}
+                    onChange={next => onUpdate(record.key, field, next)}
+                />
+            )
+        } else if (groupKey === 'wuDao' && field === 'Type') {
+            control = (
+                <JsonMultiSelectDialog
+                    value={value}
+                    options={wuDaoTypeOptions}
+                    label={label}
+                    optionColumnLabel="悟道类型"
+                    onChange={next => onUpdate(record.key, field, next)}
+                />
+            )
+        } else if (groupKey === 'npcWuDao' && field === 'wudaoID') {
+            control = (
+                <JsonMultiSelectDialog
+                    value={value}
+                    options={wuDaoOptions}
+                    label={label}
+                    optionColumnLabel="悟道"
+                    quickEdit
                     onChange={next => onUpdate(record.key, field, next)}
                 />
             )
@@ -779,6 +1018,19 @@ export function JsonEditor({
         return control
     }
 
+    function getSelectionDetails(field: string): string | null {
+        if (!record) return null
+        const value = record.data[field]
+        if (groupKey === 'npcWuDao' && field === 'wudaoID') return selectedOptionLabels(value, wuDaoOptions)
+        if (groupKey === 'npcType' && field === 'skills') return selectedOptionLabels(value, shenTongOptions)
+        if (groupKey === 'npcType' && field === 'staticSkills') return selectedOptionLabels(value, skillOptions)
+        if (groupKey === 'npcType' && field === 'yuanying') return selectedOptionLabels(value, yuanyingOptions)
+        if (AFFIX_FIELDS.has(field) && (groupKey === 'buff' || groupKey === 'item' || groupKey === 'skill' || groupKey === 'shenTong')) {
+            return selectedOptionLabels(value, affixOptions)
+        }
+        return null
+    }
+
     function renderIconPreview() {
         if (!record || !iconPath) return null
         const title = typeof record.data.name === 'string' ? record.data.name : String(record.key)
@@ -818,12 +1070,14 @@ export function JsonEditor({
                                 const label = groupKey ? translateField(groupKey, field) : field
                                 const isMovedIconField = iconField === field && iconAnchorField !== null
                                 if (isMovedIconField) return null
+                                const selectionDetails = getSelectionDetails(field)
                                 const showMovedIcon = iconField !== undefined && iconAnchorField === field
                                 const showInlineIcon = iconField === field && iconAnchorField === null
                                 return (
                                     <div key={field}>
-                                        <div className="mb-1.5">
+                                        <div className="mb-1.5 flex items-center gap-1.5">
                                             <span className="block text-sm font-medium text-ink-soft">{label}</span>
+                                            {selectionDetails ? <SelectionInfo label={label} content={selectionDetails} /> : null}
                                         </div>
                                         {renderControl(field)}
                                         {showMovedIcon ? renderMovedIconField() : null}

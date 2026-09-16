@@ -35,9 +35,9 @@ export interface SeidDrawerRecords {
 }
 
 /** 支持 Seid 编辑的主数据分组。 */
-export type SeidProjectGroupKey = 'buff' | 'item' | 'skill' | 'shenTong'
+export type SeidProjectGroupKey = 'buff' | 'item' | 'skill' | 'shenTong' | 'wuDao'
 
-const SEID_GROUPS = new Set<ProjectModGroupKey>(['buff', 'item', 'skill', 'shenTong'])
+const SEID_GROUPS = new Set<ProjectModGroupKey>(['buff', 'item', 'skill', 'shenTong', 'wuDao'])
 
 const DRAWER_META_DATASETS: Record<string, string> = {
     ArithmeticOperatorTypeDrawer: 'ArithmeticOperatorType',
@@ -74,7 +74,7 @@ export function getItemSeidDataKey(data: Record<string, JsonValue>): Extract<Sei
 export function getSeidDataKey(groupKey: SeidProjectGroupKey, data: Record<string, JsonValue>): SeidDataKey {
     if (groupKey === 'buff') return 'buff'
     if (groupKey === 'shenTong') return 'skill'
-    if (groupKey === 'skill') return 'staticSkill'
+    if (groupKey === 'skill' || groupKey === 'wuDao') return 'staticSkill'
     return getItemSeidDataKey(data)
 }
 

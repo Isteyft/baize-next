@@ -17,9 +17,11 @@ import {
     collectSearchableText,
     formatCellValue,
     getGroupEnumLabel,
+    getRecordSelectOptions,
     GROUP_ICON_FIELDS,
     hasSearchKeyword,
     matchesSearchQuery,
+    type RecordSelectOption,
     resolveModIconPath,
     TABLE_SEARCH_PLACEHOLDER,
 } from '../utils/json'
@@ -52,6 +54,8 @@ interface DataTableProps {
     onDeleteRecords?: (keys: string[]) => void
     /** 已预加载的 meta 数据集，用于把枚举字段渲染为描述文本。 */
     metaDatasets?: JsonDataset[]
+    /** 悟道类型记录，用于把悟道的 Type 数组显示为中文名称。 */
+    wuDaoTypeRecords?: JsonRecord[]
     /** 搜索框占位文案，默认按 id/名称/介绍搜索。 */
     searchPlaceholder?: string
     /** 当前 mod 文件夹相对项目根目录的路径，用于解析 Assets 下的图标。 */
@@ -74,6 +78,8 @@ const VISIBLE_FIELDS: Partial<Record<ProjectModGroupKey, string[]>> = {
     shenTong: ['name', 'descr'],
     npcType: ['Type', 'Level'],
     npcWuDao: ['Type', 'lv'],
+    wuDaoAllType: ['name', 'name1'],
+    wuDao: ['name', 'Lv', 'Type'],
     tuJianChunWenBen: ['name2', 'descr'],
 }
 
@@ -91,6 +97,8 @@ const PRIMARY_FIELDS: Partial<Record<ProjectModGroupKey, string>> = {
     shenTong: 'id',
     npcType: 'id',
     npcWuDao: 'id',
+    wuDaoAllType: 'id',
+    wuDao: 'id',
     tuJianChunWenBen: 'id',
 }
 
@@ -106,19 +114,37 @@ function parseRecordId(value: string): string | number {
     return Number.isSafeInteger(parsed) ? parsed : value
 }
 
+/** 将一个悟道类型值转换成悟道类型表中的中文名称。 */
+function formatWuDaoTypeValue(value: JsonValue, options: RecordSelectOption[]): string {
+    const values = Array.isArray(value) ? value : [value]
+    return values
+        .map(item => {
+            const id = typeof item === 'number' ? item : typeof item === 'string' && item.trim() ? Number(item.trim()) : NaN
+            if (!Number.isFinite(id)) return formatCellValue(item)
+            const option = options.find(candidate => candidate.id === id)
+            if (!option) return formatCellValue(item)
+            const prefix = `${option.id} `
+            return option.label.startsWith(prefix) ? option.label.slice(prefix.length) : option.label
+        })
+        .join('、')
+}
+
 /**
  * 将单元格值格式化为展示文本：配置了 meta 枚举的字段显示“描述(id)”，其余保持原样。
  * @param groupKey 当前分组 key。
  * @param field 字段名。
  * @param value 字段值。
  * @param metaDatasets 已预加载的 meta 数据集。
+ * @param wuDaoTypeOptions 悟道类型选项，用于把悟道的 Type 数组显示为中文名称。
  */
 export function formatCellText(
     groupKey: ProjectModGroupKey | null,
     field: string,
     value: JsonValue,
-    metaDatasets: JsonDataset[] = []
+    metaDatasets: JsonDataset[] = [],
+    wuDaoTypeOptions: RecordSelectOption[] = []
 ): string {
+    if (groupKey === 'wuDao' && field === 'Type') return formatWuDaoTypeValue(value, wuDaoTypeOptions)
     const label = getGroupEnumLabel(groupKey, field, value, metaDatasets)
     if (label !== null) return `${label}(${formatCellValue(value)})`
     return formatCellValue(value)
@@ -202,6 +228,7 @@ interface DataRowProps {
     showIconColumn: boolean
     groupKey: ProjectModGroupKey | null
     metaDatasets: JsonDataset[]
+    wuDaoTypeOptions: RecordSelectOption[]
     /** 当前记录图标的 Assets 相对路径，无图标时为 null。 */
     iconPath: string | null
     /** 读取 mod 资源并返回可展示的 data URL。 */
@@ -220,6 +247,7 @@ const DataRow = memo(function DataRow({
     showIconColumn,
     groupKey,
     metaDatasets,
+    wuDaoTypeOptions,
     iconPath,
     readAsset,
     selected,
@@ -248,7 +276,7 @@ const DataRow = memo(function DataRow({
             {hasPrimaryField && primaryField ? (
                 <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs">
                     {record.data[primaryField] !== undefined
-                        ? formatCellText(groupKey, primaryField, record.data[primaryField], metaDatasets)
+                        ? formatCellText(groupKey, primaryField, record.data[primaryField], metaDatasets, wuDaoTypeOptions)
                         : '-'}
                 </td>
             ) : null}
@@ -259,7 +287,7 @@ const DataRow = memo(function DataRow({
                         {value === undefined ? (
                             <span className="text-ink-subtle">—</span>
                         ) : (
-                            formatCellText(groupKey, field, value, metaDatasets)
+                            formatCellText(groupKey, field, value, metaDatasets, wuDaoTypeOptions)
                         )}
                     </td>
                 )
@@ -278,6 +306,7 @@ export function DataTable({
     onCreateRecord,
     onDeleteRecords,
     metaDatasets = [],
+    wuDaoTypeRecords = [],
     searchPlaceholder = TABLE_SEARCH_PLACEHOLDER,
     modDirectory = null,
     readAsset,
@@ -299,7 +328,8 @@ export function DataTable({
     const primaryField = groupKey ? (PRIMARY_FIELDS[groupKey] ?? null) : null
     const currentSelectedKeys = selectedKeys ?? (selectedKey ? [selectedKey] : [])
     const selectedKeySet = useMemo(() => new Set(currentSelectedKeys), [currentSelectedKeys])
-    const showIconColumn = Boolean(modDirectory) && groupKey !== null && GROUP_ICON_FIELDS[groupKey] !== undefined
+    const wuDaoTypeOptions = useMemo(() => getRecordSelectOptions(wuDaoTypeRecords), [wuDaoTypeRecords])
+    const showIconColumn = Boolean(modDirectory) && groupKey !== null && groupKey !== 'wuDao' && GROUP_ICON_FIELDS[groupKey] !== undefined
     const iconPaths = useMemo(() => {
         const paths = new Map<string, string | null>()
         for (const record of records) {
@@ -542,6 +572,7 @@ export function DataTable({
                                     showIconColumn={showIconColumn}
                                     groupKey={groupKey}
                                     metaDatasets={metaDatasets}
+                                    wuDaoTypeOptions={wuDaoTypeOptions}
                                     iconPath={iconPaths.get(record.key) ?? null}
                                     readAsset={readAsset}
                                     selected={selectedKeySet.has(record.key)}

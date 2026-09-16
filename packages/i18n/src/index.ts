@@ -156,6 +156,23 @@ const GROUP_FIELD_LABELS: Record<string, Record<string, string>> = {
         value21: '魔',
         wudaoID: '悟道神通',
     },
+    wuDaoAllType: {
+        id: '悟道类型ID',
+        name: '简称',
+        name1: '名称',
+    },
+    wuDao: {
+        id: '悟道ID',
+        icon: '图标',
+        name: '悟道名称',
+        Cast: '参悟消耗',
+        Type: '悟道类型',
+        Lv: '悟道等级',
+        seid: '特性ID',
+        desc: '描述',
+        xiaoguo: '效果',
+        CanForget: '可遗忘',
+    },
     tuJianChunWenBen: {
         id: '词缀条目ID',
         name1: '词缀项目值',

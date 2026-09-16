@@ -155,6 +155,13 @@ describe('JsonEditor', () => {
             />
         )
 
+        expect(screen.getByLabelText('快速编辑词缀（炼器）')).toBeTruthy()
+        expect(screen.getAllByRole('tooltip').map(node => node.textContent)).toContain('Affix A')
+        const quickEdit = screen.getByLabelText('快速编辑词缀（炼器）')
+        fireEvent.change(quickEdit, { target: { value: '270001，270002' } })
+        fireEvent.blur(quickEdit)
+        expect(onUpdate).toHaveBeenCalledWith('1', 'Affix', [270001, 270002])
+
         fireEvent.click(screen.getByRole('button', { name: '词缀（炼器）' }))
         expect(screen.getByRole('dialog')).toBeTruthy()
         fireEvent.click(screen.getByText('Affix B'))
@@ -594,6 +601,9 @@ describe('JsonEditor', () => {
             />
         )
 
+        expect(screen.getByLabelText('快速编辑绑定技能')).toBeTruthy()
+        expect(screen.getByLabelText('快速编辑绑定功法')).toBeTruthy()
+        expect(screen.getAllByRole('tooltip').map(node => node.textContent)).toContain('1 赤焰神通1')
         fireEvent.click(screen.getByRole('button', { name: /绑定技能/ }))
         expect(screen.getByRole('dialog', { name: '绑定技能' })).toBeTruthy()
         expect(screen.queryByRole('checkbox', { name: '选择 1 赤焰神通2' })).toBeNull()
@@ -609,7 +619,28 @@ describe('JsonEditor', () => {
         expect(onUpdate).toHaveBeenCalledWith('700000', 'staticSkills', [5001, 5031])
     })
 
-    it('selects a single skill for yuanying and uses the fixed race enum', () => {
+    it('quick edits comma-separated NPC skill bindings', () => {
+        const onUpdate = vi.fn()
+        render(
+            <JsonEditor
+                groupKey="npcType"
+                record={{ key: '700000', data: { id: 700000, skills: [1], staticSkills: [5001] } }}
+                onUpdate={onUpdate}
+            />
+        )
+
+        const skillsInput = screen.getByLabelText('快速编辑绑定技能')
+        fireEvent.change(skillsInput, { target: { value: '201, 202' } })
+        fireEvent.blur(skillsInput)
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'skills', [201, 202])
+
+        const staticSkillsInput = screen.getByLabelText('快速编辑绑定功法')
+        fireEvent.change(staticSkillsInput, { target: { value: '5001，5031' } })
+        fireEvent.blur(staticSkillsInput)
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'staticSkills', [5001, 5031])
+    })
+
+    it('selects a single skill for yuanying in a dialog and displays it', () => {
         const onUpdate = vi.fn()
         const skillRecords = [
             { key: '5001', data: { id: 5001, name: '长春功' } },
@@ -625,7 +656,10 @@ describe('JsonEditor', () => {
         )
 
         fireEvent.click(screen.getByRole('button', { name: '元婴功法' }))
-        fireEvent.click(screen.getByText('5187 元婴真诀'))
+        expect(screen.getByRole('dialog', { name: '元婴功法' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('radio', { name: '选择 5187 元婴真诀' }))
+        expect(screen.getByText('已选择 5187 元婴真诀')).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
         expect(onUpdate).toHaveBeenCalledWith('700000', 'yuanying', 5187)
 
         fireEvent.click(screen.getByRole('button', { name: '种族（1 人）' }))
@@ -702,5 +736,86 @@ describe('JsonEditor', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /Seid/ }))
         expect(screen.getByRole('dialog')).toBeTruthy()
+    })
+
+    it('selects WuDao Type values from WuDaoAllType records in a dialog table', () => {
+        const onUpdate = vi.fn()
+        render(
+            <JsonEditor
+                groupKey="wuDao"
+                record={{ key: '101', data: { id: 101, name: '御金', Type: [1] } }}
+                wuDaoTypeRecords={[
+                    { key: '1', data: { id: 1, name: '金', name1: '金之道' } },
+                    { key: '2', data: { id: 2, name: '木', name1: '木之道' } },
+                ]}
+                onUpdate={onUpdate}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: '悟道类型' }))
+        expect(screen.getByRole('dialog', { name: '悟道类型' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('checkbox', { name: '选择 2 木' }))
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+        expect(onUpdate).toHaveBeenCalledWith('101', 'Type', [1, 2])
+    })
+
+    it('selects NPC WuDao wudaoID values from WuDao records in a dialog table', () => {
+        const onUpdate = vi.fn()
+        render(
+            <JsonEditor
+                groupKey="npcWuDao"
+                record={{ key: '700000', data: { id: 700000, name: 'NPC 悟道', wudaoID: [101] } }}
+                wuDaoRecords={[
+                    { key: '101', data: { id: 101, name: '御金' } },
+                    { key: '111', data: { id: 111, name: '蓄势' } },
+                ]}
+                onUpdate={onUpdate}
+            />
+        )
+
+        const quickEdit = screen.getByLabelText('快速编辑悟道神通')
+        fireEvent.change(quickEdit, { target: { value: '101,111' } })
+        fireEvent.blur(quickEdit)
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'wudaoID', [101, 111])
+
+        fireEvent.click(screen.getByRole('button', { name: '悟道神通' }))
+        expect(screen.getByRole('dialog', { name: '悟道神通' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('checkbox', { name: '选择 111 蓄势' }))
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+        expect(onUpdate).toHaveBeenCalledWith('700000', 'wudaoID', [101, 111])
+    })
+    it('reuses StaticSkill Seid metadata for WuDao seid fields', () => {
+        const metaDatasets: JsonDataset[] = [
+            {
+                id: 'static-skill-seid',
+                name: 'StaticSkillSeidMeta',
+                kind: 'file',
+                records: [
+                    {
+                        key: '7',
+                        data: {
+                            ID: 7,
+                            IDName: 'skillid',
+                            Name: '功法特性',
+                            Desc: '测试',
+                            Properties: [],
+                        },
+                    },
+                ],
+            },
+        ]
+        render(
+            <JsonEditor
+                groupKey="wuDao"
+                record={{ key: '101', data: { id: 101, name: '御金', seid: [7] } }}
+                metaDatasets={metaDatasets}
+                onUpdateSeidData={vi.fn()}
+                onUpdate={vi.fn()}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: /Seid/ }))
+        expect(screen.getByRole('dialog', { name: 'Seid 编辑器' })).toBeTruthy()
+        expect(screen.getByText('功法特性')).toBeTruthy()
     })
 })

@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 
 import type { AffixSelectOption } from '../utils/json'
 
+const inputClass =
+    'w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-ink transition-colors placeholder:text-ink-subtle focus:border-accent focus:outline-none'
+
 interface AffixSelectProps {
     value: JsonValue[]
     options: AffixSelectOption[]
@@ -19,8 +22,23 @@ function selectionFromValue(value: JsonValue[]): Set<number> {
     return new Set(numericIds(value))
 }
 
+function parseNumericIdsText(text: string): number[] {
+    const result: number[] = []
+    const seen = new Set<number>()
+    for (const part of text.split(/[,，]/)) {
+        const trimmed = part.trim()
+        if (!trimmed) continue
+        const id = Number(trimmed)
+        if (!Number.isFinite(id) || seen.has(id)) continue
+        seen.add(id)
+        result.push(id)
+    }
+    return result
+}
+
 export function AffixSelect({ value, options, label, onCommit }: AffixSelectProps) {
     const [open, setOpen] = useState(false)
+    const [draft, setDraft] = useState(() => numericIds(value).join(','))
     const [selectedIds, setSelectedIds] = useState<Set<number>>(() => selectionFromValue(value))
     const optionById = useMemo(() => new Map(options.map(option => [option.id, option])), [options])
     const currentIds = useMemo(() => numericIds(value), [value])
@@ -28,14 +46,19 @@ export function AffixSelect({ value, options, label, onCommit }: AffixSelectProp
     const allChecked = options.length > 0 && options.every(option => selectedIds.has(option.id))
 
     useEffect(() => {
+        const ids = numericIds(value)
+        setSelectedIds(new Set(ids))
+        setDraft(ids.join(','))
+    }, [value])
+
+    useEffect(() => {
         if (!open) return
-        setSelectedIds(selectionFromValue(value))
         function handleKeyDown(event: KeyboardEvent): void {
             if (event.key === 'Escape') setOpen(false)
         }
         document.addEventListener('keydown', handleKeyDown)
         return () => document.removeEventListener('keydown', handleKeyDown)
-    }, [open, value])
+    }, [open])
 
     function toggle(id: number): void {
         setSelectedIds(prev => {
@@ -68,6 +91,12 @@ export function AffixSelect({ value, options, label, onCommit }: AffixSelectProp
         setOpen(false)
     }
 
+    function commitQuickEdit(): void {
+        const next = parseNumericIdsText(draft)
+        setDraft(next.join(','))
+        onCommit(next)
+    }
+
     const summary =
         currentOptions.length > 0
             ? `${currentOptions.length} 项：${currentOptions
@@ -89,6 +118,23 @@ export function AffixSelect({ value, options, label, onCommit }: AffixSelectProp
                     选择
                 </span>
             </button>
+            <input
+                type="text"
+                aria-label={`快速编辑${label}`}
+                value={draft}
+                placeholder="用逗号分隔 ID"
+                onChange={event => setDraft(event.target.value)}
+                onBlur={commitQuickEdit}
+                onKeyDown={event => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault()
+                        event.currentTarget.blur()
+                    } else if (event.key === 'Escape') {
+                        setDraft(numericIds(value).join(','))
+                    }
+                }}
+                className={`${inputClass} mt-2 font-mono text-xs`}
+            />
             {open ? (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"

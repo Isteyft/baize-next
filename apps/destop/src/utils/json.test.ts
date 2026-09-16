@@ -119,6 +119,15 @@ describe('project JSON mapping', () => {
                 content: '{"1":{"id":1,"typenum":2,"name1":"hidden","name2":"shown"}}',
             },
             {
+                relativePath: 'plugins/Next/_/mod_demo/Data/WuDaoAllTypeJson.json',
+                content: '{"1":{"id":1,"name":"金","name1":"金之道"}}',
+            },
+            {
+                relativePath: 'plugins/Next/_/mod_demo/Data/WuDaoJson.json',
+                content:
+                    '{"101":{"id":101,"icon":"101","name":"御金","Cast":1,"Type":[1],"Lv":1,"seid":[1],"desc":"desc","xiaoguo":"effect","CanForget":0}}',
+            },
+            {
                 relativePath: 'plugins/Next/_/mod_demo/Data/Unknown.json',
                 content: '{"ignored":true}',
             },
@@ -134,6 +143,26 @@ describe('project JSON mapping', () => {
         expect(mod.groups.find(group => group.key === 'buff')?.records).toEqual([{ key: '100', data: { buffid: 100, name: 'Power' } }])
         expect(mod.groups.find(group => group.key === 'tuJianChunWenBen')?.records).toEqual([
             { key: '1', data: { id: 1, typenum: 2, name1: 'hidden', name2: 'shown' } },
+        ])
+        expect(mod.groups.find(group => group.key === 'wuDaoAllType')?.records).toEqual([
+            { key: '1', data: { id: 1, name: '金', name1: '金之道' } },
+        ])
+        expect(mod.groups.find(group => group.key === 'wuDao')?.records).toEqual([
+            {
+                key: '101',
+                data: {
+                    id: 101,
+                    icon: '101',
+                    name: '御金',
+                    Cast: 1,
+                    Type: [1],
+                    Lv: 1,
+                    seid: [1],
+                    desc: 'desc',
+                    xiaoguo: 'effect',
+                    CanForget: 0,
+                },
+            },
         ])
     })
 
@@ -375,6 +404,16 @@ describe('project JSON mapping', () => {
                             label: 'tuJianChunWenBen',
                             records: [{ key: '1', data: { id: 1, name2: 'shown' } }],
                         },
+                        {
+                            key: 'wuDaoAllType',
+                            label: 'wuDaoAllType',
+                            records: [{ key: '1', data: { id: 1, name: '金', name1: '金之道' } }],
+                        },
+                        {
+                            key: 'wuDao',
+                            label: 'wuDao',
+                            records: [{ key: '101', data: { id: 101, name: '御金' } }],
+                        },
                     ],
                 },
             ],
@@ -384,6 +423,8 @@ describe('project JSON mapping', () => {
         expect(paths).toContain('plugins/Next/_/mod_demo/Config/modConfig.json')
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/BuffJsonData/100.json')
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/TuJianChunWenBen.json')
+        expect(paths).toContain('plugins/Next/_/mod_demo/Data/WuDaoAllTypeJson.json')
+        expect(paths).toContain('plugins/Next/_/mod_demo/Data/WuDaoJson.json')
         expect(writes.find(write => write.relativePath.endsWith('BuffJsonData/100.json'))?.content).toContain('"buffid": 100')
     })
 

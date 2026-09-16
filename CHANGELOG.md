@@ -2,7 +2,19 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+## [2026-09-17]
+
+-   feat(destop): 悟道神通、NPC 绑定技能和绑定功法增加逗号分隔的快速编辑输入框，并在字段提示中显示已选内容。
+-   feat(destop): 元婴功法改为单选弹窗，显示当前选择内容。
+-   feat(destop): 所有词缀字段增加逗号快速编辑输入框和已选内容悬浮提示。
+
 ## [2026-09-16]
+
+-   feat(types): 解析 Data/WuDaoAllTypeJson.json 与 Data/WuDaoJson.json 并生成共享 TypeScript 类型。
+-   feat(destop): Mod 树新增“悟道类型”和“悟道”分组，支持加载、编辑、保存与表格展示。
+-   feat(destop): 悟道表格用悟道类型数据展示 Type 中文名称，并在 JSON 编辑器中通过多选表格选择。
+-   feat(destop): 悟道表格不显示图标，悟道特性复用功法的 StaticSkill Seid。
+-   feat(destop): NPC 悟道的悟道神通改为从悟道数据中通过多选表格绑定。
 
 -   feat(destop): 预加载多个 Meta 来源时按文件名合并同名数据集，同名记录由后加载的数据覆盖。
 -   feat(destop): 项目目录右键菜单新增“保存该项目”，顶部文件菜单改为“保存全部项目”，支持一次保存所有已打开项目。

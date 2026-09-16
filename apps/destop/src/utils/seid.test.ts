@@ -11,6 +11,7 @@ import {
     getSeidMetaDatasetName,
     getSeidPropertyOptions,
     isSeidMultiSelect,
+    isSeidProjectGroup,
 } from './seid'
 
 const ELEMENT_DATASET: JsonDataset = {
@@ -52,6 +53,9 @@ describe('Seid data mapping', () => {
         expect(getSeidMetaDatasetName('item', { type: 4 })).toBe('ItemUseSeidMeta')
         expect(getSeidDataKey('shenTong', {})).toBe('skill')
         expect(getSeidDataKey('skill', {})).toBe('staticSkill')
+        expect(getSeidDataKey('wuDao', {})).toBe('staticSkill')
+        expect(getSeidMetaDatasetName('wuDao', {})).toBe('StaticSkillSeidMeta')
+        expect(isSeidProjectGroup('wuDao')).toBe(true)
     })
 
     it('parses Seid definitions and SpecialDrawer options', () => {

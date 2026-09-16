@@ -39,3 +39,4 @@ typenum
 staticskill
 skillid
 panduan
+xiaoguo
