@@ -4,6 +4,12 @@
 
 ## [2026-09-17]
 
+-   docs(destop): 记录 settings.json 和 error.log 在应用数据目录中的实际位置。
+-   fix(destop): 将设置和错误日志迁移到 Tauri appDataDir，并自动迁移旧 localStorage 设置。
+-   docs(destop): 补充正式 Tauri 打包命令，避免误用直接 Cargo 构建的开发版产物。
+-   fix(destop): 正式打包使用 Tauri CLI，并禁用窗口 DevTools，避免产物加载 localhost 或打开检查器。
+-   fix(destop): Windows 构建始终使用 GUI 子系统，避免打包后额外弹出控制台。
+-   feat(destop): 配置 Tauri 应用图标，补充 Windows ICO、macOS ICNS 与多尺寸 PNG 资源。
 -   feat(destop): 所有新增记录和技能书按数据 schema 补全字段，编辑器完整展示必填字段，保存时统一字段类型。
 -   fix(i18n): 修复字段表头入口，改为优先读取 zh-CN locale，并在缺失时回退英文或原始字段名。
 -   feat(destop): 功法与神通右键菜单新增“生成技能书”，按 Skill_ID 生成对应物品和 ItemsSeidJsonData 参数，物品 ID 冲突时不覆盖。

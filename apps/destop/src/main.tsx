@@ -7,14 +7,20 @@ import App from './App'
 import { ErrorLogWindow } from './components/ErrorLogWindow'
 import { SettingsWindow } from './components/SettingsWindow'
 import { applyLanguage, getSavedLanguage } from './language'
+import { initializeSettingsStorage } from './settingsStorage'
 import { applyTheme, getSavedTheme } from './theme'
 
-applyTheme(getSavedTheme())
-applyLanguage(getSavedLanguage())
+async function renderApp(): Promise<void> {
+    await initializeSettingsStorage()
+    applyTheme(getSavedTheme())
+    applyLanguage(getSavedLanguage())
 
-const params = new URLSearchParams(window.location.search)
-const isSettingsWindow = params.get('window') === 'settings'
-const isErrorLogWindow = params.get('window') === 'error-log'
-const root = isErrorLogWindow ? <ErrorLogWindow /> : isSettingsWindow ? <SettingsWindow /> : <App />
+    const params = new URLSearchParams(window.location.search)
+    const isSettingsWindow = params.get('window') === 'settings'
+    const isErrorLogWindow = params.get('window') === 'error-log'
+    const root = isErrorLogWindow ? <ErrorLogWindow /> : isSettingsWindow ? <SettingsWindow /> : <App />
 
-ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode>{root}</React.StrictMode>)
+    ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode>{root}</React.StrictMode>)
+}
+
+void renderApp()

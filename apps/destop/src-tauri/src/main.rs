@@ -1,4 +1,4 @@
-#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 /** Tauri 桌面端入口。 */
 fn main() {

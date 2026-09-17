@@ -1,6 +1,8 @@
 import { AppLanguage } from '@baize-next/types'
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 
+import { getSettingsStorageItem, setSettingsStorageItem } from './settingsStorage'
+
 const STORAGE_KEY = 'baize-next.language'
 const LANGUAGE_EVENT = 'baize-next:language-changed'
 
@@ -16,7 +18,7 @@ function isAppLanguage(value: string | null): value is AppLanguage {
 /** 读取已保存的界面语言，未保存或异常时回退到简体中文。 */
 export function getSavedLanguage(): AppLanguage {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY)
+        const raw = getSettingsStorageItem(STORAGE_KEY)
         if (isAppLanguage(raw)) return raw
     } catch {
         // 非 Tauri / 存储受限环境忽略。
@@ -31,7 +33,7 @@ export function applyLanguage(language: AppLanguage): void {
 
 function persistLanguage(language: AppLanguage): void {
     try {
-        localStorage.setItem(STORAGE_KEY, language)
+        setSettingsStorageItem(STORAGE_KEY, language)
     } catch {
         // 忽略存储写入异常。
     }

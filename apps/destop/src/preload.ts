@@ -1,5 +1,7 @@
 ﻿import { PreloadSourceMode } from '@baize-next/types'
 
+import { getSettingsStorageItem, setSettingsStorageItem } from './settingsStorage'
+
 export interface PreloadSourceEntry {
     id: string
     mode: PreloadSourceMode
@@ -50,7 +52,7 @@ function normalizeEntries(value: unknown): PreloadSourceEntry[] | null {
 
 export function getSavedPreloadSettings(): PreloadSettings {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY)
+        const raw = getSettingsStorageItem(STORAGE_KEY)
         if (raw) {
             const parsed = JSON.parse(raw) as unknown
             if (parsed && typeof parsed === 'object') {
@@ -84,7 +86,7 @@ export function getSavedPreloadSettings(): PreloadSettings {
 
 export function savePreloadSettings(settings: PreloadSettings): void {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+        setSettingsStorageItem(STORAGE_KEY, JSON.stringify(settings))
     } catch {
         // Ignore storage failures.
     }

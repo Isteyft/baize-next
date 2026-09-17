@@ -1,6 +1,8 @@
 import { ThemeColor } from '@baize-next/types'
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 
+import { getSettingsStorageItem, setSettingsStorageItem } from './settingsStorage'
+
 const STORAGE_KEY = 'baize-next.theme'
 const THEME_EVENT = 'baize-next:theme-changed'
 
@@ -23,7 +25,7 @@ function isThemeColor(value: string | null): value is ThemeColor {
 /** 读取已保存的主题，未保存或异常时回退到青黑色。 */
 export function getSavedTheme(): ThemeColor {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY)
+        const raw = getSettingsStorageItem(STORAGE_KEY)
         if (isThemeColor(raw)) return raw
     } catch {
         // 非 Tauri / 存储受限环境忽略。
@@ -38,7 +40,7 @@ export function applyTheme(theme: ThemeColor): void {
 
 function persistTheme(theme: ThemeColor): void {
     try {
-        localStorage.setItem(STORAGE_KEY, theme)
+        setSettingsStorageItem(STORAGE_KEY, theme)
     } catch {
         // 忽略存储写入异常。
     }

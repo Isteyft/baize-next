@@ -3,6 +3,7 @@
 use serde::Serialize;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use tauri::{AppHandle, Manager};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -180,21 +181,48 @@ fn base64_encode(bytes: &[u8]) -> String {
     output
 }
 
-fn error_log_path() -> Result<std::path::PathBuf, String> {
-    std::env::current_dir()
-        .map(|dir| dir.join("error.log"))
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let directory = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    Ok(directory)
+}
+
+fn app_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app_data_dir(app).map(|directory| directory.join("settings.json"))
+}
+
+fn error_log_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app_data_dir(app).map(|directory| directory.join("error.log"))
+}
+
+#[tauri::command]
+fn read_app_settings(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
+    let path = app_settings_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    serde_json::from_str(&content)
+        .map(Some)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn reset_error_log() -> Result<(), String> {
-    let path = error_log_path()?;
+fn write_app_settings(app: AppHandle, settings: serde_json::Value) -> Result<(), String> {
+    let path = app_settings_path(&app)?;
+    let content = serde_json::to_string_pretty(&settings).map_err(|error| error.to_string())?;
+    std::fs::write(path, content).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn reset_error_log(app: AppHandle) -> Result<(), String> {
+    let path = error_log_path(&app)?;
     std::fs::write(&path, "").map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn append_error_log(content: String) -> Result<(), String> {
-    let path = error_log_path()?;
+fn append_error_log(app: AppHandle, content: String) -> Result<(), String> {
+    let path = error_log_path(&app)?;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -204,8 +232,8 @@ fn append_error_log(content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn read_error_log() -> Result<String, String> {
-    let path = error_log_path()?;
+fn read_error_log(app: AppHandle) -> Result<String, String> {
+    let path = error_log_path(&app)?;
     if !path.exists() {
         return Ok(String::new());
     }
@@ -221,6 +249,8 @@ pub fn run() {
             write_project_file,
             delete_project_file,
             read_mod_asset,
+            read_app_settings,
+            write_app_settings,
             reset_error_log,
             append_error_log,
             read_error_log

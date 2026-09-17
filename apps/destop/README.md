@@ -17,3 +17,18 @@ pnpm --filter @baize-next/destop tauri dev
 ```
 
 > 首次运行 Tauri 需要安装 Rust 工具链。
+
+## 打包
+
+```bash
+pnpm --filter @baize-next/destop tauri build
+```
+
+安装包生成在 `src-tauri/target/release/bundle/msi/`。不要直接使用 `cargo build --release` 代替 Tauri 打包，否则产物会使用开发服务器地址。
+
+## 数据目录
+
+Windows 上的设置和错误日志统一保存在 `%APPDATA%\com.baize-next.destop`：
+
+-   `settings.json`：主题、语言和预加载设置
+-   `error.log`：应用错误日志
