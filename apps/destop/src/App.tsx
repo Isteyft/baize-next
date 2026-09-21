@@ -23,6 +23,7 @@ import { TitleBar } from './components/TitleBar'
 import { appendErrorLog, resetErrorLog } from './errorLog'
 import { DEFAULT_META_PRELOAD_PATH, getSavedPreloadSettings, PRELOAD_MODE_OPTIONS } from './preload'
 import { subscribeTheme } from './theme'
+import type { BatchIdChange } from './utils/batchId'
 import { withDefaultRecordData } from './utils/defaultRecordTemplates'
 import {
     createDatasetId,
@@ -605,6 +606,46 @@ export default function App() {
         setSelectedRecordKeys(nextSelectedRecord ? [nextSelectedRecord] : [])
     }
 
+    function handleBatchUpdateIds(changes: BatchIdChange[]): void {
+        if (!selection || changes.length === 0) return
+
+        const changeMap = new Map(changes.map(change => [change.oldKey, change]))
+        const replaceIdsInProject = (item: ProjectData): ProjectData =>
+            updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>
+                groupRecords.map(record => {
+                    const change = changeMap.get(record.key)
+                    if (!change) return record
+                    return { key: change.newKey, data: { ...record.data, [change.field]: change.value } }
+                })
+            ) ?? item
+
+        if (selection.kind === 'preload') {
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? replaceIdsInProject(item) : item)))
+            setSelectedRecordKey(changes[0]?.newKey ?? selectedRecordKey)
+            setSelectedRecordKeys(changes.map(change => change.newKey))
+            return
+        }
+
+        // Directory-style groups persist one file per record; rename writes new files, so old files must be deleted on save.
+        const modName = selectedMod?.name
+        if (modName) {
+            const deletedFiles = changes
+                .map(change => resolveProjectRecordRelativePath(modName, selection.groupKey, change.oldKey))
+                .filter((relativePath): relativePath is string => relativePath !== null)
+            if (deletedFiles.length > 0) {
+                setPendingDeletedFilesByProject(previous => ({
+                    ...previous,
+                    [selection.projectId]: [...new Set([...(previous[selection.projectId] ?? []), ...deletedFiles])],
+                }))
+            }
+        }
+
+        markProjectDirty(selection.projectId)
+        setProjects(previous => previous.map(item => (item.id === selection.projectId ? replaceIdsInProject(item) : item)))
+        setSelectedRecordKey(changes[0]?.newKey ?? selectedRecordKey)
+        setSelectedRecordKeys(changes.map(change => change.newKey))
+    }
+
     function handleUpdateSeidData(dataKey: SeidDataKey, seidId: string, targetKey: string, value: Record<string, JsonValue> | null): void {
         if (!selection) return
         const updateProjectSeid = (item: ProjectData): ProjectData =>
@@ -756,6 +797,7 @@ export default function App() {
                     onCreateRecord={handleCreateRecord}
                     onGenerateSkillBook={handleGenerateSkillBook}
                     onDeleteRecords={handleDeleteRecords}
+                    onBatchUpdateIds={handleBatchUpdateIds}
                     metaDatasets={metaDatasets}
                     wuDaoTypeRecords={wuDaoTypeRecords}
                     modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}

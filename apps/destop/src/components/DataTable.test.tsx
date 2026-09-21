@@ -613,6 +613,64 @@ describe('DataTable', () => {
 
         expect(spacerHeight).toBeGreaterThan(1000 * 40 - 100 * 40)
     })
+    it('opens the batch modify dialog and rewrites selected record ids without conflicts', () => {
+        const onBatchUpdateIds = vi.fn()
+        render(
+            <DataTable
+                groupKey="item"
+                records={[
+                    { key: '1', data: { id: 1, name: 'Alpha' } },
+                    { key: '2', data: { id: 2, name: 'Beta' } },
+                    { key: '10', data: { id: 10, name: 'Keep' } },
+                ]}
+                selectedKey="1"
+                selectedKeys={['1', '2']}
+                onSelect={vi.fn()}
+                onBatchUpdateIds={onBatchUpdateIds}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('Alpha'))
+        fireEvent.click(screen.getByRole('menuitem', { name: '批量修改 ID' }))
+        expect(screen.getByRole('dialog', { name: '批量修改 ID' })).toBeTruthy()
+
+        fireEvent.change(screen.getByLabelText('首个 ID'), { target: { value: '100' } })
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+
+        expect(onBatchUpdateIds).toHaveBeenCalledTimes(1)
+        expect(onBatchUpdateIds).toHaveBeenCalledWith([
+            { oldKey: '1', newKey: '100', field: 'id', value: 100 },
+            { oldKey: '2', newKey: '101', field: 'id', value: 101 },
+        ])
+    })
+
+    it('intercepts an occupied id, shows a conflict dialog and does not modify anything', () => {
+        const onBatchUpdateIds = vi.fn()
+        render(
+            <DataTable
+                groupKey="item"
+                records={[
+                    { key: '1', data: { id: 1, name: 'Alpha' } },
+                    { key: '2', data: { id: 2, name: 'Beta' } },
+                    { key: '101', data: { id: 101, name: 'Occupied' } },
+                ]}
+                selectedKey="1"
+                selectedKeys={['1', '2']}
+                onSelect={vi.fn()}
+                onBatchUpdateIds={onBatchUpdateIds}
+            />
+        )
+
+        fireEvent.contextMenu(screen.getByText('Alpha'))
+        fireEvent.click(screen.getByRole('menuitem', { name: '批量修改 ID' }))
+        fireEvent.change(screen.getByLabelText('首个 ID'), { target: { value: '100' } })
+        fireEvent.click(screen.getByRole('button', { name: '确定' }))
+
+        expect(onBatchUpdateIds).not.toHaveBeenCalled()
+        expect(screen.queryByRole('dialog', { name: '批量修改 ID' })).toBeNull()
+        expect(screen.getByRole('dialog', { name: '批量修改 ID 冲突' })).toBeTruthy()
+        expect(screen.getByText('ID 101 已被占用，批量修改已取消。')).toBeTruthy()
+    })
 })
 
 describe('getVisibleRange', () => {

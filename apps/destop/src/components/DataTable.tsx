@@ -12,6 +12,7 @@ import {
     useState,
 } from 'react'
 
+import { type BatchIdChange, buildBatchIdReplacements } from '../utils/batchId'
 import {
     collectRecordFields,
     collectSearchableText,
@@ -54,6 +55,8 @@ interface DataTableProps {
     onGenerateSkillBook?: (recordKey: string) => void
     /** 删除指定记录。 */
     onDeleteRecords?: (keys: string[]) => void
+    /** 批量替换选中记录的主键 ID。 */
+    onBatchUpdateIds?: (changes: BatchIdChange[]) => void
     /** 已预加载的 meta 数据集，用于把枚举字段渲染为描述文本。 */
     metaDatasets?: JsonDataset[]
     /** 悟道类型记录，用于把悟道的 Type 数组显示为中文名称。 */
@@ -358,6 +361,7 @@ export function DataTable({
     onCreateRecord,
     onGenerateSkillBook,
     onDeleteRecords,
+    onBatchUpdateIds,
     metaDatasets = [],
     wuDaoTypeRecords = [],
     searchPlaceholder = TABLE_SEARCH_PLACEHOLDER,
@@ -378,6 +382,10 @@ export function DataTable({
     const [addError, setAddError] = useState('')
     const [deleteKeys, setDeleteKeys] = useState<string[] | null>(null)
     const [idConflict, setIdConflict] = useState<string | null>(null)
+    const [batchModifyKeys, setBatchModifyKeys] = useState<string[] | null>(null)
+    const [batchIdInput, setBatchIdInput] = useState('')
+    const [batchIdError, setBatchIdError] = useState('')
+    const [batchIdConflict, setBatchIdConflict] = useState<string | null>(null)
 
     const primaryField = groupKey ? (PRIMARY_FIELDS[groupKey] ?? null) : null
     const batchRealmField: NpcBatchRealmField | null = groupKey === 'npcType' ? 'Level' : groupKey === 'npcWuDao' ? 'lv' : null
@@ -457,6 +465,10 @@ export function DataTable({
         setAddError('')
         setDeleteKeys(null)
         setIdConflict(null)
+        setBatchModifyKeys(null)
+        setBatchIdInput('')
+        setBatchIdError('')
+        setBatchIdConflict(null)
     }, [groupKey])
 
     function commitSelection(keys: string[], activeKey: string | null): void {
@@ -562,6 +574,34 @@ export function DataTable({
         if (!onGenerateSkillBook) return
         setContextMenu(null)
         onGenerateSkillBook(recordKey)
+    }
+
+    function openBatchIdDialog(keys: string[]): void {
+        setContextMenu(null)
+        setBatchModifyKeys(keys)
+        setBatchIdInput('')
+        setBatchIdError('')
+        setBatchIdConflict(null)
+    }
+
+    function submitBatchIdDialog(event: FormEvent<HTMLFormElement>): void {
+        event.preventDefault()
+        if (!batchModifyKeys || !primaryField || !onBatchUpdateIds) return
+        setBatchIdError('')
+        const result = buildBatchIdReplacements(records, batchModifyKeys, primaryField, batchIdInput)
+        if (!result.ok) {
+            if (result.code === 'conflict') {
+                setBatchIdConflict(result.conflictingId ?? result.message)
+                setBatchModifyKeys(null)
+            } else {
+                setBatchIdError(result.message)
+            }
+            return
+        }
+        onBatchUpdateIds(result.changes)
+        setBatchModifyKeys(null)
+        setBatchIdInput('')
+        setBatchIdError('')
     }
 
     function confirmDelete(): void {
@@ -697,6 +737,17 @@ export function DataTable({
                                 批量生成
                             </button>
                         ) : null}
+                        {primaryField && onBatchUpdateIds && contextMenu.keys.length > 0 ? (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => openBatchIdDialog(contextMenu.keys)}
+                                className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
+                            >
+                                批量修改 ID
+                            </button>
+                        ) : null}
+
                         <button
                             type="button"
                             role="menuitem"
@@ -760,6 +811,91 @@ export function DataTable({
                             </button>
                         </footer>
                     </form>
+                </div>
+            ) : null}
+
+            {batchModifyKeys ? (
+                <div
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setBatchModifyKeys(null)
+                    }}
+                >
+                    <form
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="批量修改 ID"
+                        onSubmit={submitBatchIdDialog}
+                        className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="border-b border-line px-5 py-4">
+                            <h3 className="text-base font-semibold text-ink">批量修改 ID</h3>
+                        </header>
+                        <div className="p-5">
+                            <p className="mb-3 text-sm text-ink-soft">已选择 {batchModifyKeys.length} 条记录，请输入首个 ID。</p>
+                            <label className="mb-2 block text-sm text-ink-soft" htmlFor="data-table-batch-id">
+                                首个 ID
+                            </label>
+                            <input
+                                id="data-table-batch-id"
+                                type="text"
+                                value={batchIdInput}
+                                onChange={event => setBatchIdInput(event.target.value)}
+                                autoFocus
+                                placeholder="请输入首个 ID"
+                                className="w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-ink transition-colors placeholder:text-ink-subtle focus:border-accent focus:outline-none"
+                            />
+                            {batchIdError ? <p className="mt-2 text-sm text-danger">{batchIdError}</p> : null}
+                        </div>
+                        <footer className="flex justify-end gap-2 border-t border-line px-5 py-3">
+                            <button
+                                type="button"
+                                onClick={() => setBatchModifyKeys(null)}
+                                className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft hover:bg-hover"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="submit"
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                确定
+                            </button>
+                        </footer>
+                    </form>
+                </div>
+            ) : null}
+
+            {batchIdConflict ? (
+                <div
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setBatchIdConflict(null)
+                    }}
+                >
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="批量修改 ID 冲突"
+                        className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="border-b border-line px-5 py-4">
+                            <h3 className="text-base font-semibold text-ink">批量修改 ID</h3>
+                        </header>
+                        <p className="px-5 py-5 text-sm text-ink-soft">ID {batchIdConflict} 已被占用，批量修改已取消。</p>
+                        <footer className="flex justify-end border-t border-line px-5 py-3">
+                            <button
+                                type="button"
+                                autoFocus
+                                onClick={() => setBatchIdConflict(null)}
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                知道
+                            </button>
+                        </footer>
+                    </section>
                 </div>
             ) : null}
 

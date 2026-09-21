@@ -2,6 +2,12 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+## [2026-09-21]
+
+-   feat(destop): 数据表格右键菜单新增“批量修改 ID”，对 Shift/Ctrl 多选记录批量替换主键 ID，并预校验所有目标 ID。
+-   feat(destop): 批量修改 ID 输入首个 ID 后按连续编号生成序列，遇到已有 ID 占用时取消全部修改并弹窗提示。
+-   test(destop): 补充批量 ID 无冲突生成与冲突拦截不改动的 Vitest 用例。
+
 ## [2026-09-17]
 
 -   docs(destop): 记录 settings.json 和 error.log 在应用数据目录中的实际位置。
