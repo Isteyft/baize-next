@@ -15,6 +15,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { useCallback, useEffect, useState } from 'react'
 
 import { DataTable } from './components/DataTable'
+import { ErrorDetailModal } from './components/ErrorDetailModal'
 import { JsonEditor } from './components/JsonEditor'
 import { LeftPanel } from './components/LeftPanel'
 import { StartupLoading } from './components/StartupLoading'
@@ -46,7 +47,7 @@ import {
 import type { SeidDrawerRecords } from './utils/seid'
 import { appendSkillBookToMod, isSkillBookSourceGroup } from './utils/skillBook'
 
-const PRELOAD_FAILED_LABEL = '\u9884\u52a0\u8f7d\u5931\u8d25'
+const LOAD_FAILED_HINT = '\u9879\u76ee\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u6587\u4ef6'
 const SAVED_TEXT = '\u5df2\u4fdd\u5b58'
 const SAVE_FAILED_TEXT = '\u4fdd\u5b58\u5931\u8d25'
 function updateModSeidData(
@@ -125,6 +126,7 @@ export default function App() {
     const [selectedRecordKeys, setSelectedRecordKeys] = useState<string[]>([])
     const [bootPhase, setBootPhase] = useState<'loading' | 'ready' | 'error'>('loading')
     const [bootError, setBootError] = useState<string>('')
+    const [errorModalOpen, setErrorModalOpen] = useState(false)
     const [bootPath, setBootPath] = useState<string>(DEFAULT_META_PRELOAD_PATH)
     const [bootMode, setBootMode] = useState<PreloadSourceMode>(PreloadSourceMode.Directory)
     const [reloadToken, setReloadToken] = useState(0)
@@ -183,6 +185,7 @@ export default function App() {
     function recordError(source: string, error: unknown): void {
         const message = error instanceof Error ? error.message : String(error)
         setBootError(message)
+        setErrorModalOpen(true)
         void appendErrorLog(source, error)
     }
 
@@ -218,6 +221,7 @@ export default function App() {
             }
             setBootPhase('loading')
             setBootError('')
+            setErrorModalOpen(false)
             setSelection(null)
             setSelectedRecordKey(null)
             setSelectedRecordKeys([])
@@ -750,15 +754,18 @@ export default function App() {
 
     if (bootPhase === 'loading' || bootPhase === 'error') {
         return (
-            <StartupLoading
-                status={bootPhase}
-                path={bootPath}
-                modeLabel={PRELOAD_MODE_OPTIONS.find(option => option.value === bootMode)?.label ?? ''}
-                message={bootError}
-                onRetry={() => setReloadToken(token => token + 1)}
-                onContinue={bootPhase === 'error' ? () => setBootPhase('ready') : undefined}
-                onOpenSettings={() => void handleOpenSettings()}
-            />
+            <>
+                <StartupLoading
+                    status={bootPhase}
+                    path={bootPath}
+                    modeLabel={PRELOAD_MODE_OPTIONS.find(option => option.value === bootMode)?.label ?? ''}
+                    message={bootError ? LOAD_FAILED_HINT : ''}
+                    onRetry={() => setReloadToken(token => token + 1)}
+                    onContinue={bootPhase === 'error' ? () => setBootPhase('ready') : undefined}
+                    onOpenSettings={() => void handleOpenSettings()}
+                />
+                <ErrorDetailModal open={errorModalOpen} message={bootError} onClose={() => setErrorModalOpen(false)} />
+            </>
         )
     }
 
@@ -821,12 +828,11 @@ export default function App() {
                 />
             </main>
             {bootError ? (
-                <div className="flex shrink-0 items-center gap-2 border-t border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">
-                    <span className="whitespace-pre-line">
-                        {PRELOAD_FAILED_LABEL}: {bootError}
-                    </span>
+                <div className="flex shrink-0 items-center border-t border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">
+                    <span className="truncate">{LOAD_FAILED_HINT}</span>
                 </div>
             ) : null}
+            <ErrorDetailModal open={errorModalOpen} message={bootError} onClose={() => setErrorModalOpen(false)} />
             <Tip open={tip !== null} message={tip?.message ?? ''} tone={tip?.tone} onHide={() => setTip(null)} />
         </div>
     )

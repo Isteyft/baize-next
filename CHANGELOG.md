@@ -9,6 +9,10 @@
 -   test(destop): 补充批量 ID 无冲突生成与冲突拦截不改动的 Vitest 用例。
 -   fix(destop): 项目 JSON 加载失败时精准定位到具体出错文件，错误信息包含相对路径文件名、所属项目与行列号详情，并按项目聚合汇总避免逐文件多次弹窗。
 -   test(destop): 补充 Vitest 用例，模拟含多个文件的项目目录，验证第 2 个损坏文件能被报错信息准确指向文件名，并覆盖多文件错误的汇总场景。
+-   feat(destop): 主界面报错提示恢复为单行简洁文案，完整错误详情改由 ErrorDetailModal 加载失败弹窗展示。
+-   feat(destop): 新增 ErrorDetailModal 组件，内容区限高并以纵向滚动呈现完整报错上下文，超长文本不再撑爆弹窗。
+-   test(destop): 补充 ErrorDetailModal 打开/关闭与滚动区域限高的 Vitest 用例。
+-   style(destop): 错误日志弹窗标题栏右侧控制区改为填满标题栏整高，修复最小化/最大化/关闭按钮在 hover 时高亮高度异常的问题。
 
 ## [2026-09-17]
 
