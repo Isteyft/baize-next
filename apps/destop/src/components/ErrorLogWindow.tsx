@@ -28,7 +28,7 @@ export function ErrorLogWindow() {
         <div className="flex h-full select-none flex-col bg-base text-ink">
             <header data-tauri-drag-region="true" className="flex h-10 shrink-0 items-center justify-between bg-panel text-ink-soft">
                 <span className="px-4 text-sm font-medium text-ink-soft">{ERROR_LOG_TITLE}</span>
-                <div className="flex items-center pr-1">
+                <div className="flex items-center self-stretch pr-1">
                     <button
                         type="button"
                         onClick={() => void refresh()}
