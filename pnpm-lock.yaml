@@ -89,6 +89,9 @@ importers:
 
   apps/destop:
     dependencies:
+      '@baize-next/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@baize-next/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -150,7 +153,11 @@ importers:
 
   apps/mobile: {}
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@baize-next/types':
+        specifier: workspace:*
+        version: link:../types
 
   packages/i18n: {}
 

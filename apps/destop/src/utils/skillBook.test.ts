@@ -42,8 +42,8 @@ describe('skill book generation', () => {
                     ShuaXin: 0,
                     vagueType: 0,
                     price: 0,
-                    desc: '造成雷系伤害',
-                    desc2: '造成雷系伤害',
+                    desc: '7',
+                    desc2: '\u9020\u6210\u96f7\u7cfb\u4f24\u5bb3',
                     CanSale: 0,
                     DanDu: 0,
                     CanUse: 0,
@@ -89,8 +89,8 @@ describe('skill book generation', () => {
             quality: 2,
             typePinJie: 1,
             seid: [2],
-            desc: '提升金系伤害',
-            desc2: '提升金系伤害',
+            desc: '9',
+            desc2: '\u63d0\u5347\u91d1\u7cfb\u4f24\u5bb3',
         })
         expect(result?.seidId).toBe('2')
         expect(result?.seidValue).toEqual({ id: 9, value1: 9 })

@@ -1,3 +1,4 @@
+import { isConsultBookItem } from '@baize-next/core'
 import { translateField } from '@baize-next/i18n'
 import type { JsonDataset, JsonRecord, JsonValue, ProjectModGroupKey } from '@baize-next/types'
 import {
@@ -27,6 +28,7 @@ import {
     TABLE_SEARCH_PLACEHOLDER,
 } from '../utils/json'
 import { AssetIcon } from './AssetIcon'
+import { ContextMenu } from './ContextMenu'
 import { ScrollArea } from './ScrollArea'
 
 /**
@@ -53,6 +55,8 @@ interface DataTableProps {
     onCreateRecord?: (key: string, data: Record<string, JsonValue>) => void
     /** 从当前功法或神通记录生成技能书物品。 */
     onGenerateSkillBook?: (recordKey: string) => void
+    /** 从当前神通书/功法书物品生成请教书籍。 */
+    onGenerateConsultBook?: (recordKey: string) => void
     /** 删除指定记录。 */
     onDeleteRecords?: (keys: string[]) => void
     /** 批量替换选中记录的主键 ID。 */
@@ -360,6 +364,7 @@ export function DataTable({
     onSelectionChange,
     onCreateRecord,
     onGenerateSkillBook,
+    onGenerateConsultBook,
     onDeleteRecords,
     onBatchUpdateIds,
     metaDatasets = [],
@@ -386,6 +391,16 @@ export function DataTable({
     const [batchIdInput, setBatchIdInput] = useState('')
     const [batchIdError, setBatchIdError] = useState('')
     const [batchIdConflict, setBatchIdConflict] = useState<string | null>(null)
+
+    const contextMenuRecord =
+        contextMenu && contextMenu.keys.length === 1 ? (records.find(record => record.key === contextMenu.keys[0]) ?? null) : null
+    const canGenerateConsultBook =
+        contextMenu !== null &&
+        contextMenu.keys.length === 1 &&
+        groupKey === 'item' &&
+        onGenerateConsultBook !== undefined &&
+        contextMenuRecord !== null &&
+        isConsultBookItem(contextMenuRecord)
 
     const primaryField = groupKey ? (PRIMARY_FIELDS[groupKey] ?? null) : null
     const batchRealmField: NpcBatchRealmField | null = groupKey === 'npcType' ? 'Level' : groupKey === 'npcWuDao' ? 'lv' : null
@@ -530,8 +545,8 @@ export function DataTable({
             commitSelection([recordKey], recordKey)
         }
         setContextMenu({
-            x: Math.max(8, Math.min(event.clientX, window.innerWidth - 152)),
-            y: Math.max(8, Math.min(event.clientY, window.innerHeight - 84)),
+            x: event.clientX,
+            y: event.clientY,
             keys,
         })
     }
@@ -574,6 +589,12 @@ export function DataTable({
         if (!onGenerateSkillBook) return
         setContextMenu(null)
         onGenerateSkillBook(recordKey)
+    }
+
+    function handleGenerateConsultBook(recordKey: string): void {
+        if (!onGenerateConsultBook) return
+        setContextMenu(null)
+        onGenerateConsultBook(recordKey)
     }
 
     function openBatchIdDialog(keys: string[]): void {
@@ -703,61 +724,57 @@ export function DataTable({
             </ScrollArea>
 
             {contextMenu ? (
-                <>
-                    <div
-                        className="fixed inset-0 z-[90]"
-                        onMouseDown={() => setContextMenu(null)}
-                        onContextMenu={event => {
-                            event.preventDefault()
-                            setContextMenu(null)
-                        }}
-                    />
-                    <div
-                        role="menu"
-                        style={{ left: contextMenu.x, top: contextMenu.y }}
-                        className="fixed z-[91] min-w-32 overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-xl"
-                    >
-                        {(groupKey === 'skill' || groupKey === 'shenTong') && onGenerateSkillBook && contextMenu.keys.length === 1 ? (
-                            <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => handleGenerateSkillBook(contextMenu.keys[0]!)}
-                                className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
-                            >
-                                生成技能书
-                            </button>
-                        ) : null}
-                        {batchRealmField && onCreateRecord && contextMenu.keys.length === 1 ? (
-                            <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => handleBatchGenerate(contextMenu.keys[0]!)}
-                                className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
-                            >
-                                批量生成
-                            </button>
-                        ) : null}
-                        {primaryField && onBatchUpdateIds && contextMenu.keys.length > 0 ? (
-                            <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => openBatchIdDialog(contextMenu.keys)}
-                                className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
-                            >
-                                批量修改 ID
-                            </button>
-                        ) : null}
-
+                <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+                    {canGenerateConsultBook ? (
                         <button
                             type="button"
                             role="menuitem"
-                            onClick={() => setDeleteKeys(contextMenu.keys)}
-                            className="flex w-full items-center px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger/10"
+                            onClick={() => handleGenerateConsultBook(contextMenu.keys[0]!)}
+                            className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
                         >
-                            删除{contextMenu.keys.length > 1 ? ' (' + contextMenu.keys.length + ')' : ''}
+                            生成请教书籍
                         </button>
-                    </div>
-                </>
+                    ) : null}
+                    {(groupKey === 'skill' || groupKey === 'shenTong') && onGenerateSkillBook && contextMenu.keys.length === 1 ? (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => handleGenerateSkillBook(contextMenu.keys[0]!)}
+                            className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
+                        >
+                            生成技能书
+                        </button>
+                    ) : null}
+                    {batchRealmField && onCreateRecord && contextMenu.keys.length === 1 ? (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => handleBatchGenerate(contextMenu.keys[0]!)}
+                            className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
+                        >
+                            批量生成
+                        </button>
+                    ) : null}
+                    {primaryField && onBatchUpdateIds && contextMenu.keys.length > 0 ? (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => openBatchIdDialog(contextMenu.keys)}
+                            className="flex w-full items-center px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-hover"
+                        >
+                            批量修改 ID
+                        </button>
+                    ) : null}
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => setDeleteKeys(contextMenu.keys)}
+                        className="flex w-full items-center px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger/10"
+                    >
+                        删除{contextMenu.keys.length > 1 ? ' (' + contextMenu.keys.length + ')' : ''}
+                    </button>
+                </ContextMenu>
             ) : null}
 
             {addOpen ? (

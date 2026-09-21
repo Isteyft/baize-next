@@ -328,6 +328,14 @@ describe('DataTable', () => {
         expect(onDeleteRecords).toHaveBeenCalledWith(['2'])
     })
 
+    it('keeps the raw clientY so the context menu can place itself near the bottom row', () => {
+        render(<DataTable groupKey="buff" records={createRecords(3)} selectedKey="1" selectedKeys={['1']} onSelect={vi.fn()} />)
+
+        fireEvent.contextMenu(screen.getByText('Row2'), { clientX: 50, clientY: 700 })
+
+        expect(screen.getByRole('menu').style.top).toBe('700px')
+    })
+
     it.each([
         ['npcType', 'Level', 3, '炼气后期(3)'],
         ['npcWuDao', 'lv', 7, '金丹初期(7)'],

@@ -48,8 +48,9 @@ export function createSkillBookGeneration(groupKey: SkillBookSourceGroupKey, sou
     if (skillId === null) return null
 
     const isShenTong = groupKey === 'shenTong'
-    const seidId = isShenTong ? '1' : '2'
     const descr = source.data.descr ?? ''
+    const seidId = isShenTong ? '1' : '2'
+
     const sourceAffix = isShenTong ? source.data.Affix2 : source.data.Affix
     const item: JsonRecord = {
         key: String(skillId),
@@ -63,7 +64,7 @@ export function createSkillBookGeneration(groupKey: SkillBookSourceGroupKey, sou
             quality: source.data.Skill_LV ?? 0,
             typePinJie: source.data.typePinJie ?? 0,
             seid: [Number(seidId)],
-            desc: descr,
+            desc: String(skillId),
             desc2: descr,
         }),
     }

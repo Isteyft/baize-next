@@ -1,3 +1,4 @@
+import { validateConsultBookGeneration } from '@baize-next/core'
 import {
     type JsonDataset,
     type JsonRecord,
@@ -50,6 +51,14 @@ import { appendSkillBookToMod, isSkillBookSourceGroup } from './utils/skillBook'
 const LOAD_FAILED_HINT = '\u9879\u76ee\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u6587\u4ef6'
 const SAVED_TEXT = '\u5df2\u4fdd\u5b58'
 const SAVE_FAILED_TEXT = '\u4fdd\u5b58\u5931\u8d25'
+
+interface ConsultBookConfirmState {
+    recordKey: string
+    sourceId: number
+    targetId: number
+    sourceName: string
+    record: JsonRecord
+}
 function updateModSeidData(
     mod: ProjectMod,
     dataKey: SeidDataKey,
@@ -136,6 +145,8 @@ export default function App() {
     const [modRootPaths, setModRootPaths] = useState<Record<string, string>>({})
     const [dirtyProjectIds, setDirtyProjectIds] = useState<string[]>([])
     const [tip, setTip] = useState<{ message: string; tone: TipTone } | null>(null)
+    const [consultBookConfirm, setConsultBookConfirm] = useState<ConsultBookConfirmState | null>(null)
+    const [consultBookWarning, setConsultBookWarning] = useState<string | null>(null)
 
     const preloadProject = preloadProjects.find(project => project.id === activePreloadProjectId) ?? preloadProjects[0] ?? null
     const project = projects.find(item => item.id === activeProjectId) ?? projects[0] ?? null
@@ -576,6 +587,47 @@ export default function App() {
         setTip({ message: `已生成技能书：${String(result.item.data.name ?? result.skillId)}`, tone: 'success' })
     }
 
+    function handleGenerateConsultBook(recordKey: string): void {
+        if (!selection || selection.groupKey !== 'item' || !selectedMod) return
+        const sourceRecord = records.find(record => record.key === recordKey)
+        if (!sourceRecord) return
+
+        const result = validateConsultBookGeneration(sourceRecord, records)
+        if (!result.ok) {
+            setConsultBookWarning(result.message)
+            return
+        }
+
+        setConsultBookConfirm({
+            recordKey,
+            sourceId: result.sourceId,
+            targetId: result.targetId,
+            sourceName: result.sourceName,
+            record: result.record,
+        })
+    }
+
+    function confirmGenerateConsultBook(): void {
+        if (!selection || !consultBookConfirm || selection.groupKey !== 'item') return
+        const nextRecord = consultBookConfirm.record
+
+        const addRecordToProject = (item: ProjectData): ProjectData =>
+            updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>
+                groupRecords.some(record => record.key === nextRecord.key) ? groupRecords : [...groupRecords, nextRecord]
+            ) ?? item
+
+        if (selection.kind === 'preload') {
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? addRecordToProject(item) : item)))
+        } else {
+            markProjectDirty(selection.projectId)
+            setProjects(previous => previous.map(item => (item.id === selection.projectId ? addRecordToProject(item) : item)))
+        }
+        setSelectedRecordKey(nextRecord.key)
+        setSelectedRecordKeys([nextRecord.key])
+        const displayName = consultBookConfirm.sourceName || String(nextRecord.data.name ?? nextRecord.key)
+        setTip({ message: '已生成请教书籍：' + displayName, tone: 'success' })
+        setConsultBookConfirm(null)
+    }
     function handleDeleteRecords(recordKeys: string[]): void {
         if (!selection || recordKeys.length === 0) return
         const keySet = new Set(recordKeys)
@@ -803,6 +855,7 @@ export default function App() {
                     onSelectionChange={setSelectedRecordKeys}
                     onCreateRecord={handleCreateRecord}
                     onGenerateSkillBook={handleGenerateSkillBook}
+                    onGenerateConsultBook={handleGenerateConsultBook}
                     onDeleteRecords={handleDeleteRecords}
                     onBatchUpdateIds={handleBatchUpdateIds}
                     metaDatasets={metaDatasets}
@@ -833,6 +886,82 @@ export default function App() {
                 </div>
             ) : null}
             <ErrorDetailModal open={errorModalOpen} message={bootError} onClose={() => setErrorModalOpen(false)} />
+
+            {consultBookWarning ? (
+                <div
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setConsultBookWarning(null)
+                    }}
+                >
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="生成请教书籍"
+                        className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="border-b border-line px-5 py-4">
+                            <h3 className="text-base font-semibold text-ink">生成请教书籍</h3>
+                        </header>
+                        <p className="px-5 py-5 text-sm text-ink-soft">{consultBookWarning}</p>
+                        <footer className="flex justify-end border-t border-line px-5 py-3">
+                            <button
+                                type="button"
+                                autoFocus
+                                onClick={() => setConsultBookWarning(null)}
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                知道了
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            ) : null}
+
+            {consultBookConfirm ? (
+                <div
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setConsultBookConfirm(null)
+                    }}
+                >
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="确认生成请教书籍"
+                        className="w-[min(460px,calc(100vw-48px))] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="border-b border-line px-5 py-4">
+                            <h3 className="text-base font-semibold text-ink">生成请教书籍</h3>
+                        </header>
+                        <p className="px-5 py-5 text-sm text-ink-soft">
+                            {'是否创建 ID 为 [(' +
+                                consultBookConfirm.sourceId +
+                                ')' +
+                                (consultBookConfirm.sourceName || '') +
+                                '] 的请教书籍？'}
+                        </p>
+                        <footer className="flex justify-end gap-2 border-t border-line px-5 py-3">
+                            <button
+                                type="button"
+                                onClick={() => setConsultBookConfirm(null)}
+                                className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft hover:bg-hover"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmGenerateConsultBook}
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                确定
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            ) : null}
             <Tip open={tip !== null} message={tip?.message ?? ''} tone={tip?.tone} onHide={() => setTip(null)} />
         </div>
     )
