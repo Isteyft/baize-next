@@ -25,7 +25,7 @@ export function StartupLoading({ status, path, modeLabel, message, onRetry, onCo
                 <p className="text-sm font-medium text-ink-soft">{isError ? FAILED_TEXT : LOADING_TEXT}</p>
                 <p className="mt-2 truncate font-mono text-xs text-ink-muted">{modeLabel}</p>
                 <p className="mt-1 truncate font-mono text-xs text-ink-subtle">{path}</p>
-                {isError && message ? <p className="mt-3 break-words text-xs text-danger">{message}</p> : null}
+                {isError && message ? <p className="mt-3 whitespace-pre-line break-words text-xs text-danger">{message}</p> : null}
                 <div className="mt-5 flex items-center justify-center gap-2">
                     {isError && onContinue ? (
                         <button

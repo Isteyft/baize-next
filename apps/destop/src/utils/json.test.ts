@@ -166,6 +166,31 @@ describe('project JSON mapping', () => {
         ])
     })
 
+    it('points to the exact corrupted file when a middle file fails to load', async () => {
+        const entries: ProjectFileEntry[] = [
+            { relativePath: 'plugins/Next/_/mod_demo/Data/BuffJsonData/100.json', content: '{"buffid":100,"name":"Power"}' },
+            { relativePath: 'plugins/Next/_/mod_demo/Data/BuffJsonData/config_01.json', content: '{"buffid":1,' },
+            { relativePath: 'plugins/Next/_/mod_demo/Data/BuffJsonData/200.json', content: '{"buffid":200,"name":"Guard"}' },
+            { relativePath: 'plugins/Next/_/mod_demo/Data/BuffJsonData/300.json', content: '{"buffid":300,"name":"Haste"}' },
+        ]
+
+        await expect(parseProjectFromEntries('D:\\games\\Editor', entries)).rejects.toThrow(/config_01\.json\n项目：Editor\nJSON 语法错误/)
+    })
+
+    it('aggregates multiple failed files into one summary error', async () => {
+        const entries: ProjectFileEntry[] = [
+            { relativePath: 'plugins/Next/_/mod_demo/Data/BuffJsonData/100.json', content: '{"buffid":100,"name":"Power"}' },
+            { relativePath: 'plugins/Next/_/mod_demo/Data/BuffJsonData/200.json', content: '{"buffid":200,' },
+            { relativePath: 'plugins/Next/_/mod_demo/Data/BuffJsonData/300.json', content: '{"buffid":300' },
+        ]
+
+        await expect(parseProjectFromEntries('D:\\games\\Editor', entries)).rejects.toThrowError(
+            /BuffJsonData\/200\.json\n项目：Editor\nJSON 语法错误/
+        )
+        await expect(parseProjectFromEntries('D:\\games\\Editor', entries)).rejects.toThrowError(
+            /BuffJsonData\/300\.json\n项目：Editor\nJSON 语法错误/
+        )
+    })
     it('parses meta entries by file name', () => {
         const dataset = parseMetaJsonEntry({
             relativePath: 'plugins/Next/_/mod_demo/Data/example.json',

@@ -822,7 +822,7 @@ export default function App() {
             </main>
             {bootError ? (
                 <div className="flex shrink-0 items-center gap-2 border-t border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">
-                    <span>
+                    <span className="whitespace-pre-line">
                         {PRELOAD_FAILED_LABEL}: {bootError}
                     </span>
                 </div>

@@ -117,12 +117,47 @@ export function isRecordMap(value: unknown): value is Record<string, Record<stri
     return entries.length > 0 && entries.every(isRecordObject)
 }
 
+/** 由字符位置换算成 1-based 的行列号。 */
+function jsonLineColumn(source: string, position: number): { line: number; column: number } {
+    let line = 1
+    let column = 1
+    const end = Math.min(Math.max(position, 0), source.length)
+    for (let index = 0; index < end; index += 1) {
+        if (source.charCodeAt(index) === 10) {
+            line += 1
+            column = 1
+        } else {
+            column += 1
+        }
+    }
+    return { line, column }
+}
+
+/** 把 JSON 解析失败整理成带行列号的说明。 */
+function describeJsonSyntaxError(source: string, error: unknown): Error {
+    const message = error instanceof Error ? error.message : String(error)
+    const lineColumn = message.match(/line\s+(\d+)\s+column\s+(\d+)/i)
+    if (lineColumn) {
+        return new Error(`JSON 语法错误：第 ${lineColumn[1]} 行，第 ${lineColumn[2]} 列`)
+    }
+    const position = message.match(/(?:at\s+)?position\s+(\d+)/i)
+    if (position) {
+        const { line, column } = jsonLineColumn(source, Number(position[1]))
+        return new Error(`JSON 语法错误：第 ${line} 行，第 ${column} 列`)
+    }
+    return new Error(`JSON 语法错误：${message}`)
+}
+
 function parseJsonText(text: string): unknown {
     const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
     try {
         return JSON.parse(source)
-    } catch {
-        return JSON.parse(stripJsonTrailingCommas(source))
+    } catch (error) {
+        try {
+            return JSON.parse(stripJsonTrailingCommas(source))
+        } catch {
+            throw describeJsonSyntaxError(source, error)
+        }
     }
 }
 
@@ -843,12 +878,40 @@ function parseSeidFileContent(content: string): Record<string, Record<string, Js
     return result
 }
 
+/** 单个项目文件在加载过程中产生的错误记录。 */
+interface JsonProjectLoadError {
+    /** 相对项目根目录的文件路径（以 / 分隔）。 */
+    file: string
+    /** 该文件具体错误的可读描述。 */
+    detail: string
+}
+
+/** 将异常收集为带文件名的错误记录。 */
+function captureProjectLoadError(errors: JsonProjectLoadError[], file: string, error: unknown): void {
+    errors.push({ file, detail: error instanceof Error ? error.message : String(error) })
+}
+
+/** 将收集到的文件错误合并为一个汇总错误抛出，避免为每个文件多次弹窗。 */
+function throwProjectLoadErrors(projectName: string, errors: JsonProjectLoadError[]): never {
+    if (errors.length === 1) {
+        const { file, detail } = errors[0]!
+        throw new Error(`${file}\n项目：${projectName}\n${detail}`)
+    }
+    throw new Error(errors.map(({ file, detail }) => `${file}\n项目：${projectName}\n${detail}`).join('\n\n'))
+}
+
+/** 取相对路径的文件名并去掉 .json 后缀，用于数据集命名。 */
+function fileBaseName(relativePath: string): string {
+    const fileName = relativePath.split('/').pop() ?? 'root'
+    return fileName.replace(/\.json$/i, '')
+}
 /**
  * 将 Tauri 原生目录选择得到的 JSON 文件条目解析为项目结构。
  * 识别 plugins/Next 下的 modXXX，并按 BuffJsonData/ItemJsonData/skillJsonData 的目录结构合并数据。
  */
 export async function parseProjectFromEntries(rootPath: string, entries: ProjectFileEntry[]): Promise<ProjectData> {
     const projectName = projectNameFromPath(rootPath)
+    const errors: JsonProjectLoadError[] = []
     const grouped = new Map<string, Map<ProjectModGroupKey, ProjectFileEntry[]>>()
     const modDirectories = new Map<string, string>()
     const seidDataByMod = new Map<string, ProjectSeidData>()
@@ -870,7 +933,11 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
         if (!seidMatch) continue
         const seidData = seidDataByMod.get(seidMatch.modName) ?? {}
         const fileData = seidData[seidMatch.dataKey] ?? {}
-        fileData[seidMatch.seidId] = parseSeidFileContent(entry.content)
+        try {
+            fileData[seidMatch.seidId] = parseSeidFileContent(entry.content)
+        } catch (error) {
+            captureProjectLoadError(errors, entry.relativePath, error)
+        }
         seidData[seidMatch.dataKey] = fileData
         seidDataByMod.set(seidMatch.modName, seidData)
         grouped.set(seidMatch.modName, grouped.get(seidMatch.modName) ?? new Map<ProjectModGroupKey, ProjectFileEntry[]>())
@@ -895,18 +962,25 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
                 def.key === 'tuJianChunWenBen'
             ) {
                 for (const entry of bucket) {
-                    const fileName = entry.relativePath.split('/').pop() ?? 'root'
-                    const dataset = parseJsonContent(fileName.replace(/\.json$/i, ''), entry.content)
-                    records.push(...dataset.records)
+                    try {
+                        const dataset = parseJsonContent(fileBaseName(entry.relativePath), entry.content)
+                        records.push(...dataset.records)
+                    } catch (error) {
+                        captureProjectLoadError(errors, entry.relativePath, error)
+                    }
                 }
             } else {
                 for (const entry of bucket) {
-                    const fileName = entry.relativePath.split('/').pop() ?? 'root'
-                    const parsed: unknown = parseJsonText(entry.content)
-                    if (!isRecordObject(parsed)) {
-                        throw new Error(`文件 ${fileName} 不是对象，无法作为记录`)
+                    try {
+                        const parsed: unknown = parseJsonText(entry.content)
+                        const fileName = fileBaseName(entry.relativePath)
+                        if (!isRecordObject(parsed)) {
+                            throw new Error(`文件 ${fileName} 不是对象，无法作为记录`)
+                        }
+                        records.push({ key: resolveRecordKey(parsed, fileName), data: parsed })
+                    } catch (error) {
+                        captureProjectLoadError(errors, entry.relativePath, error)
                     }
-                    records.push({ key: resolveRecordKey(parsed, fileName.replace(/\.json$/i, '')), data: parsed })
                 }
             }
 
@@ -920,6 +994,10 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
             seidData: seidDataByMod.get(modName),
             groups,
         })
+    }
+
+    if (errors.length > 0) {
+        throwProjectLoadErrors(projectName, errors)
     }
 
     return { id: createDatasetId(projectName), name: projectName, mods }
