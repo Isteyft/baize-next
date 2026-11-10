@@ -5,7 +5,8 @@
     "windows":  [
                     "main",
                     "error-log",
-                    "settings"
+                    "settings",
+                    "chat"
                 ],
     "permissions":  [
                         "core:default",

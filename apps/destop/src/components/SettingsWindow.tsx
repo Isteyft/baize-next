@@ -2,6 +2,7 @@
 import { open } from '@tauri-apps/plugin-dialog'
 import { useEffect, useState } from 'react'
 
+import { type AiModelConfig, getSavedAiModels, saveAiModels } from '../aiModels'
 import { getSavedLanguage, LANGUAGE_OPTIONS, setLanguage as persistLanguage, subscribeLanguage } from '../language'
 import {
     createPreloadEntry,
@@ -13,6 +14,7 @@ import {
     savePreloadSettings,
 } from '../preload'
 import { getSavedTheme, setTheme as persistTheme, subscribeTheme, THEME_OPTIONS } from '../theme'
+import { ModelManager } from './ModelManager'
 import { Select, type SelectOption } from './Select'
 import { Tip, type TipTone } from './Tip'
 import { WindowControls } from './WindowControls'
@@ -153,6 +155,7 @@ export function SettingsWindow() {
     const initialPreload = getSavedPreloadSettings()
     const [metaEntries, setMetaEntries] = useState<PreloadSourceEntry[]>(initialPreload.meta)
     const [modEntries, setModEntries] = useState<PreloadSourceEntry[]>(initialPreload.mods)
+    const [aiModels, setAiModels] = useState<AiModelConfig[]>(getSavedAiModels)
     const [tip, setTip] = useState<{ message: string; tone: TipTone } | null>(null)
 
     useEffect(() => {
@@ -171,6 +174,7 @@ export function SettingsWindow() {
         persistTheme(theme)
         persistLanguage(language)
         savePreloadSettings({ meta: metaEntries, mods: modEntries })
+        saveAiModels(aiModels)
         setTip({ message: SAVED_TEXT, tone: 'success' })
     }
 
@@ -214,6 +218,7 @@ export function SettingsWindow() {
                     chooseTitle="选择 mod 预加载路径"
                     onChange={setModEntries}
                 />
+                <ModelManager models={aiModels} onChange={setAiModels} />
             </main>
             <footer className="flex shrink-0 items-center justify-end border-t border-line bg-panel p-3">
                 <button

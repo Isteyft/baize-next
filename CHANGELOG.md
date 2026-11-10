@@ -2,6 +2,15 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   feat(destop): 顶部菜单栏在「文件」与「关于」之间新增「AI」按钮，提供「对话界面」菜单项，打开独立 AI 对话窗口。
+-   fix(destop): AI 对话请求失败时同步写入错误日志，来源标识带模型名；Rust 转发增加 Base URL 合法性校验，缺少协议时返回可操作的错误提示而非笼统的 builder error。
+-   feat(destop): 新增模型 Base URL 规范化，保存时自动补 https:// 前缀并去尾斜杠，避免 reqwest 因缺少协议抛 builder error。
+-   feat(destop): 新增大模型调用模块，通过 Rust 后端 `chat_completion` 命令转发 OpenAI 兼容 /chat/completions 请求，绕开浏览器 CORS 限制。
+-   feat(destop): 后端新增 reqwest（rustls）依赖与 `chat_completion` 命令，负责 baseURL 规范化、鉴权头与请求转发。
+-   feat(destop): 设置页新增「大模型配置」区块，支持新增/编辑/删除多个模型（名称、Base URL、API Key、模型），编辑采用弹窗形式。
+-   feat(destop): 新增大模型配置持久化模块，存储键 baize-next.ai-models 纳入设置白名单。
+-   test(destop): 补充大模型调用参数透传、空消息过滤、错误抛出与流式回调交付的 Vitest 用例。
+
 -   fix(destop): 新增数据时按主键数字序插入到正确位置，保持 records 数组有序，修复新增 ID 排序位置错误的问题。
 -   test(destop): 补充 insertRecordSorted 排序插入的 Vitest 用例，覆盖数字/字符串 id、key 兜底与非数值记录。
 

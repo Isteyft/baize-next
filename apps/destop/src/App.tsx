@@ -779,7 +779,7 @@ export default function App() {
                 url: 'index.html?window=settings',
                 title: '\u8bbe\u7f6e',
                 width: 560,
-                height: 520,
+                height: 680,
                 minWidth: 420,
                 minHeight: 320,
                 center: true,
@@ -801,6 +801,25 @@ export default function App() {
                 height: 460,
                 minWidth: 420,
                 minHeight: 320,
+                center: true,
+                decorations: false,
+            })
+        } catch {
+            // Non-Tauri preview ignores the new window.
+        }
+    }
+
+    async function handleOpenChat(): Promise<void> {
+        try {
+            const existing = await WebviewWindow.getByLabel('chat')
+            if (existing) return
+            new WebviewWindow('chat', {
+                url: 'index.html?window=chat',
+                title: 'AI \u5bf9\u8bdd',
+                width: 720,
+                height: 640,
+                minWidth: 480,
+                minHeight: 400,
                 center: true,
                 decorations: false,
             })
@@ -833,6 +852,7 @@ export default function App() {
                 projectDirty={dirtyProjectIds.length > 0}
                 onOpenProject={() => void handleOpenProject()}
                 onSaveProject={() => void handleSaveAllProjects()}
+                onOpenChat={() => void handleOpenChat()}
                 onOpenSettings={() => void handleOpenSettings()}
                 onOpenErrorLog={() => void handleOpenErrorLog()}
             />

@@ -240,6 +240,77 @@ fn read_error_log(app: AppHandle) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|error| error.to_string())
 }
 
+/// 单条聊天消息（OpenAI 兼容）。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatMessageInput {
+    role: String,
+    content: String,
+}
+
+/// 去掉 baseURL 末尾斜杠，避免拼出双斜杠。
+fn normalize_base_url(base_url: &str) -> String {
+    base_url.trim().trim_end_matches('/').to_string()
+}
+
+/// 拼接 OpenAI 兼容的 chat/completions 地址。
+fn build_chat_url(base_url: &str) -> String {
+    let normalized = normalize_base_url(base_url);
+    if normalized.to_ascii_lowercase().ends_with("/chat/completions") {
+        normalized
+    } else {
+        format!("{}/chat/completions", normalized)
+    }
+}
+
+/// 通过 Rust 后端转发大模型请求，绕开浏览器 CORS 限制。
+/// 返回模型的完整回复文本。
+#[tauri::command]
+async fn chat_completion(
+    base_url: String,
+    api_key: String,
+    model: String,
+    messages: Vec<ChatMessageInput>,
+) -> Result<String, String> {
+    let url = build_chat_url(&base_url);
+
+    // 先校验 URL 是否合法，避免 reqwest 抛出笼统的 builder error。
+    let parsed = reqwest::Url::parse(&url)
+        .map_err(|_| format!("Base URL 不合法：{url}。请确认已包含 http:// 或 https:// 前缀，例如 https://api.moonshot.cn/v1"))?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err(format!("Base URL 协议不支持：{}。仅支持 http/https", parsed.scheme()));
+    }
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages.into_iter().map(|m| serde_json::json!({ "role": m.role, "content": m.content })).collect::<Vec<_>>(),
+        "stream": false,
+    });
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(url.clone())
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| format!("请求失败（URL={}）：{}", url, error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!("请求失败（{}）URL={}：{}", status.as_u16(), url, detail));
+    }
+
+    let data: serde_json::Value = response.json().await.map_err(|error| error.to_string())?;
+    let content = data["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    Ok(content)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -253,7 +324,8 @@ pub fn run() {
             write_app_settings,
             reset_error_log,
             append_error_log,
-            read_error_log
+            read_error_log,
+            chat_completion
         ])
         .run(tauri::generate_context!())
         .expect("failed to run baize-next-destop");

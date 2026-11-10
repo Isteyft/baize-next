@@ -5,6 +5,8 @@ const FILE_TEXT = '\u6587\u4ef6'
 const OPEN_PROJECT_TEXT = '\u6253\u5f00\u9879\u76ee'
 const SAVE_PROJECT_TEXT = '保存全部项目'
 const DIRTY_MARK = ' *'
+const AI_TEXT = 'AI'
+const CHAT_TEXT = '对话界面'
 const ABOUT_TEXT = '\u5173\u4e8e'
 const SETTINGS_TEXT = '\u8bbe\u7f6e'
 const ERROR_LOG_TEXT = '\u9519\u8bef\u65e5\u5fd7'
@@ -17,11 +19,20 @@ interface TitleBarProps {
     onOpenProject: () => void
     /** 保存全部已打开项目。 */
     onSaveProject: () => void
+    onOpenChat: () => void
     onOpenSettings: () => void
     onOpenErrorLog: () => void
 }
 
-export function TitleBar({ canSaveProject, projectDirty, onOpenProject, onSaveProject, onOpenSettings, onOpenErrorLog }: TitleBarProps) {
+export function TitleBar({
+    canSaveProject,
+    projectDirty,
+    onOpenProject,
+    onSaveProject,
+    onOpenChat,
+    onOpenSettings,
+    onOpenErrorLog,
+}: TitleBarProps) {
     return (
         <header
             data-tauri-drag-region="true"
@@ -44,6 +55,15 @@ export function TitleBar({ canSaveProject, projectDirty, onOpenProject, onSavePr
                     >
                         {SAVE_PROJECT_TEXT}
                         {projectDirty ? DIRTY_MARK : ''}
+                    </button>
+                </MenuDropdown>
+                <MenuDropdown label={AI_TEXT}>
+                    <button
+                        type="button"
+                        onClick={onOpenChat}
+                        className="block w-full px-3 py-1.5 text-left text-sm text-ink-soft hover:bg-hover"
+                    >
+                        {CHAT_TEXT}
                     </button>
                 </MenuDropdown>
                 <MenuDropdown label={ABOUT_TEXT}>

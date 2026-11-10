@@ -37,3 +37,6 @@ dist-ssr
 .devcontainer/data
 .devcontainer/postgresql_data
 /Data/
+
+# WorkBuddy 项目数据
+.workbuddy/
