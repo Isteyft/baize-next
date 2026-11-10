@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
 
 import type { AiModelConfig } from './aiModels'
 import type { ToolCall } from './aiTools'
@@ -64,12 +64,26 @@ export async function chatCompletionWithTools(
 }
 
 /**
- * 发起一次对话并返回完整回复。
- * 当前后端为一次性返回完整文本，为保持调用方接口稳定，仍以回调形式交付。
+ * 发起一次流式对话：后端以 SSE 逐块推送增量文本（含思考过程），
+ * 每收到一块就调用 onDelta，让界面边生成边显示。
+ * 完成后调用 onDone 并返回完整文本。
  */
 export async function chatCompletionStream(model: AiModelConfig, messages: ChatMessage[], callbacks: StreamCallbacks): Promise<string> {
-    const text = await chatCompletion(model, messages)
-    if (text) callbacks.onDelta(text)
-    callbacks.onDone(text)
-    return text
+    const onEvent = new Channel<string>()
+    let fullText = ''
+    onEvent.onmessage = (delta: string) => {
+        fullText += delta
+        callbacks.onDelta(delta)
+    }
+
+    await invoke('chat_completion_stream', {
+        baseUrl: model.baseURL,
+        apiKey: model.apiKey,
+        model: model.model,
+        messages: normalizeMessages(messages),
+        onEvent,
+    })
+
+    callbacks.onDone(fullText)
+    return fullText
 }

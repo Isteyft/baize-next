@@ -424,6 +424,101 @@ async fn chat_completion(
     Ok(ChatCompletionResult { content, tool_calls })
 }
 
+/// 从一段 SSE `data:` 行中提取增量文本：优先正文 delta.content，
+/// 其次思考内容 delta.reasoning_content / delta.reasoning。
+/// 返回 None 表示该块没有可展示的文本（如 `[DONE]` 或纯工具调用块）。
+fn extract_stream_delta(data: &serde_json::Value) -> Option<String> {
+    let choices = data.get("choices")?.as_array()?;
+    let delta = choices.first()?.get("delta")?;
+    let mut pieces: Vec<String> = Vec::new();
+    if let Some(reasoning) = delta.get("reasoning_content").or_else(|| delta.get("reasoning")) {
+        if let Some(text) = reasoning.as_str() {
+            if !text.is_empty() {
+                pieces.push(text.to_string());
+            }
+        }
+    }
+    if let Some(content) = delta.get("content") {
+        if let Some(text) = content.as_str() {
+            if !text.is_empty() {
+                pieces.push(text.to_string());
+            }
+        }
+    }
+    if pieces.is_empty() {
+        None
+    } else {
+        Some(pieces.concat())
+    }
+}
+
+/// 以流式（SSE）方式调用大模型，把增量文本通过 channel 逐步推给前端，
+/// 让界面边生成边显示（含思考过程），避免长时间只显示「思考中…」。
+#[tauri::command]
+async fn chat_completion_stream(
+    base_url: String,
+    api_key: String,
+    model: String,
+    messages: Vec<ChatMessageInput>,
+    on_event: tauri::ipc::Channel<String>,
+) -> Result<(), String> {
+    let url = build_chat_url(&base_url);
+    let parsed = reqwest::Url::parse(&url)
+        .map_err(|_| format!("Base URL 不合法：{url}。请确认已包含 http:// 或 https:// 前缀，例如 https://api.moonshot.cn/v1"))?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err(format!("Base URL 协议不支持：{}。仅支持 http/https", parsed.scheme()));
+    }
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages.iter().map(message_to_json).collect::<Vec<_>>(),
+        "stream": true,
+    });
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(url.clone())
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| format!("请求失败（URL={}）：{}", url, error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!("请求失败（{}）URL={}：{}", status.as_u16(), url, detail));
+    }
+
+    use futures_util::StreamExt;
+    let mut stream = response.bytes_stream();
+    let mut buffer = String::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| error.to_string())?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        // 按行解析 SSE；不完整行留在 buffer 等待下一块。
+        while let Some(newline) = buffer.find('\n') {
+            let line = buffer[..newline].trim_end_matches('\r').to_string();
+            buffer.drain(..=newline);
+            let data = line.trim().strip_prefix("data:").map(|s| s.trim()).unwrap_or_default();
+            if data.is_empty() || data == "[DONE]" {
+                continue;
+            }
+            let parsed_data: serde_json::Value = match serde_json::from_str(data) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+            if let Some(delta) = extract_stream_delta(&parsed_data) {
+                let _ = on_event.send(delta);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// 默认会话目录：可执行文件所在目录下的 `.bz-chat`。
 fn default_chat_dir() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|error| error.to_string())?;
@@ -544,6 +639,7 @@ pub fn run() {
             append_error_log,
             read_error_log,
             chat_completion,
+            chat_completion_stream,
             get_default_chat_dir,
             read_chat_sessions,
             write_chat_session,

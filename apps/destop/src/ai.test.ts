@@ -6,6 +6,9 @@ const invokeMock = vi.fn()
 
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: (...args: unknown[]) => invokeMock(...args),
+    Channel: class {
+        onmessage: ((message: string) => void) | undefined
+    },
 }))
 
 import { chatCompletion, chatCompletionStream } from './ai'
@@ -60,15 +63,29 @@ describe('chatCompletionStream', () => {
         invokeMock.mockReset()
     })
 
-    it('以回调形式交付完整回复', async () => {
-        invokeMock.mockResolvedValue('完整回复')
+    it('通过 channel 逐块推送增量并累积为完整回复', async () => {
+        invokeMock.mockImplementation(async (_command: string, payload: { onEvent: { onmessage?: (m: string) => void } }) => {
+            const channel = payload.onEvent
+            channel.onmessage?.('你')
+            channel.onmessage?.('好')
+        })
         const onDelta = vi.fn()
         const onDone = vi.fn()
 
         const result = await chatCompletionStream(sampleModel, [{ role: 'user', content: 'hi' }], { onDelta, onDone })
 
-        expect(result).toBe('完整回复')
-        expect(onDelta).toHaveBeenCalledWith('完整回复')
-        expect(onDone).toHaveBeenCalledWith('完整回复')
+        expect(invokeMock).toHaveBeenCalledWith(
+            'chat_completion_stream',
+            expect.objectContaining({
+                baseUrl: 'https://api.openai.com/v1',
+                apiKey: 'sk-test',
+                model: 'gpt-4o',
+                messages: [{ role: 'user', content: 'hi' }],
+            })
+        )
+        expect(onDelta).toHaveBeenNthCalledWith(1, '你')
+        expect(onDelta).toHaveBeenNthCalledWith(2, '好')
+        expect(onDone).toHaveBeenCalledWith('你好')
+        expect(result).toBe('你好')
     })
 })
