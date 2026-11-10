@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { useEffect, useState } from 'react'
 
 import { type AiModelConfig, getSavedAiModels, saveAiModels } from '../aiModels'
+import { type ChatSettings, getDefaultChatDir, getSavedChatSettings, saveChatSettings } from '../chatSettings'
 import { getSavedLanguage, LANGUAGE_OPTIONS, setLanguage as persistLanguage, subscribeLanguage } from '../language'
 import {
     createPreloadEntry,
@@ -39,6 +40,10 @@ const SAVE_TEXT = '保存'
 const SAVED_TEXT = '已保存'
 const THEME_SECTION_TITLE = '主题外观'
 const LANGUAGE_SECTION_TITLE = '界面语言'
+const CHAT_SECTION_TITLE = '会话保存位置'
+const CHAT_DIR_PLACEHOLDER = '留空使用默认目录（软件目录下的 .bz-chat）'
+const CHOOSE_DIR_TEXT = '选择目录'
+const RESET_DEFAULT_TEXT = '恢复默认'
 const META_SECTION_TITLE = 'Meta 预加载'
 const MOD_SECTION_TITLE = 'mod 预加载'
 const CHOOSE_PATH_TEXT = '选择'
@@ -47,6 +52,14 @@ const MODE_HEADER = '模式'
 const PATH_HEADER = '路径'
 const ACTION_HEADER = '操作'
 const ADD_TEXT = '+'
+
+type SettingsTab = 'software' | 'mod' | 'ai'
+
+const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
+    { key: 'software', label: '软件' },
+    { key: 'mod', label: 'Mod' },
+    { key: 'ai', label: 'AI' },
+]
 
 interface PreloadListProps {
     title: string
@@ -156,7 +169,14 @@ export function SettingsWindow() {
     const [metaEntries, setMetaEntries] = useState<PreloadSourceEntry[]>(initialPreload.meta)
     const [modEntries, setModEntries] = useState<PreloadSourceEntry[]>(initialPreload.mods)
     const [aiModels, setAiModels] = useState<AiModelConfig[]>(getSavedAiModels)
+    const [chatSettings, setChatSettings] = useState<ChatSettings>(getSavedChatSettings)
+    const [defaultChatDir, setDefaultChatDir] = useState('')
+    const [activeTab, setActiveTab] = useState<SettingsTab>('software')
     const [tip, setTip] = useState<{ message: string; tone: TipTone } | null>(null)
+
+    useEffect(() => {
+        void getDefaultChatDir().then(setDefaultChatDir)
+    }, [])
 
     useEffect(() => {
         return subscribeTheme(next => {
@@ -175,7 +195,23 @@ export function SettingsWindow() {
         persistLanguage(language)
         savePreloadSettings({ meta: metaEntries, mods: modEntries })
         saveAiModels(aiModels)
+        saveChatSettings(chatSettings)
         setTip({ message: SAVED_TEXT, tone: 'success' })
+    }
+
+    async function handleChooseChatDir(): Promise<void> {
+        const selected = await open({
+            directory: true,
+            multiple: false,
+            title: '选择会话保存目录',
+        })
+        if (typeof selected === 'string' && selected) {
+            setChatSettings({ dir: selected })
+        }
+    }
+
+    function handleResetChatDir(): void {
+        setChatSettings({ dir: '' })
     }
 
     return (
@@ -186,39 +222,94 @@ export function SettingsWindow() {
                     <WindowControls />
                 </div>
             </header>
+
+            <nav className="flex shrink-0 gap-1 border-b border-line bg-panel px-3 pt-2">
+                {SETTINGS_TABS.map(tab => (
+                    <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`rounded-t-md px-4 py-2 text-sm font-medium transition-colors focus:outline-none ${
+                            activeTab === tab.key
+                                ? 'border-b-2 border-accent bg-raised text-ink'
+                                : 'text-ink-muted hover:bg-hover hover:text-ink-soft'
+                        }`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </nav>
+
             <main className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
-                <section className="space-y-2">
-                    <h2 className="text-sm font-medium text-ink-muted">{THEME_SECTION_TITLE}</h2>
-                    <div className="max-w-xs">
-                        <Select value={theme} options={THEME_SELECT_OPTIONS} onChange={setTheme} aria-label={THEME_SECTION_TITLE} />
-                    </div>
-                </section>
-                <section className="space-y-2">
-                    <h2 className="text-sm font-medium text-ink-muted">{LANGUAGE_SECTION_TITLE}</h2>
-                    <div className="max-w-xs">
-                        <Select
-                            value={language}
-                            options={LANGUAGE_SELECT_OPTIONS}
-                            onChange={setLanguage}
-                            aria-label={LANGUAGE_SECTION_TITLE}
+                {activeTab === 'software' ? (
+                    <>
+                        <section className="space-y-2">
+                            <h2 className="text-sm font-medium text-ink-muted">{LANGUAGE_SECTION_TITLE}</h2>
+                            <div className="max-w-xs">
+                                <Select
+                                    value={language}
+                                    options={LANGUAGE_SELECT_OPTIONS}
+                                    onChange={setLanguage}
+                                    aria-label={LANGUAGE_SECTION_TITLE}
+                                />
+                            </div>
+                        </section>
+                        <section className="space-y-2">
+                            <h2 className="text-sm font-medium text-ink-muted">{THEME_SECTION_TITLE}</h2>
+                            <div className="max-w-xs">
+                                <Select value={theme} options={THEME_SELECT_OPTIONS} onChange={setTheme} aria-label={THEME_SECTION_TITLE} />
+                            </div>
+                        </section>
+                    </>
+                ) : activeTab === 'mod' ? (
+                    <>
+                        <PreloadList
+                            title={META_SECTION_TITLE}
+                            entries={metaEntries}
+                            defaultPath={DEFAULT_META_PRELOAD_PATH}
+                            chooseTitle="选择 Meta 预加载路径"
+                            onChange={setMetaEntries}
                         />
-                    </div>
-                </section>
-                <PreloadList
-                    title={META_SECTION_TITLE}
-                    entries={metaEntries}
-                    defaultPath={DEFAULT_META_PRELOAD_PATH}
-                    chooseTitle="选择 Meta 预加载路径"
-                    onChange={setMetaEntries}
-                />
-                <PreloadList
-                    title={MOD_SECTION_TITLE}
-                    entries={modEntries}
-                    defaultPath={DEFAULT_MOD_PRELOAD_PATH}
-                    chooseTitle="选择 mod 预加载路径"
-                    onChange={setModEntries}
-                />
-                <ModelManager models={aiModels} onChange={setAiModels} />
+                        <PreloadList
+                            title={MOD_SECTION_TITLE}
+                            entries={modEntries}
+                            defaultPath={DEFAULT_MOD_PRELOAD_PATH}
+                            chooseTitle="选择 mod 预加载路径"
+                            onChange={setModEntries}
+                        />
+                    </>
+                ) : (
+                    <>
+                        <ModelManager models={aiModels} onChange={setAiModels} />
+                        <section className="space-y-2">
+                            <h2 className="text-sm font-medium text-ink-muted">{CHAT_SECTION_TITLE}</h2>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={chatSettings.dir}
+                                    onChange={event => setChatSettings({ dir: event.target.value })}
+                                    placeholder={CHAT_DIR_PLACEHOLDER}
+                                    className="min-w-0 flex-1 rounded-md border border-line bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => void handleChooseChatDir()}
+                                    className="rounded-md bg-accent px-3 py-2 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover"
+                                >
+                                    {CHOOSE_DIR_TEXT}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleResetChatDir}
+                                    className="rounded-md px-3 py-2 text-xs text-ink-muted transition-colors hover:bg-hover"
+                                >
+                                    {RESET_DEFAULT_TEXT}
+                                </button>
+                            </div>
+                            {defaultChatDir ? <p className="text-xs text-ink-subtle">默认目录：{defaultChatDir}</p> : null}
+                        </section>
+                    </>
+                )}
             </main>
             <footer className="flex shrink-0 items-center justify-end border-t border-line bg-panel p-3">
                 <button

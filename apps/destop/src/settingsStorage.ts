@@ -1,6 +1,12 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 
-const SETTING_KEYS = ['baize-next.theme', 'baize-next.language', 'baize-next.preload-settings', 'baize-next.ai-models'] as const
+const SETTING_KEYS = [
+    'baize-next.theme',
+    'baize-next.language',
+    'baize-next.preload-settings',
+    'baize-next.ai-models',
+    'baize-next.chat-settings',
+] as const
 
 type SettingKey = (typeof SETTING_KEYS)[number]
 type SettingsMap = Partial<Record<SettingKey, string>>

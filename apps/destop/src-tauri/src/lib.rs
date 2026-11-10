@@ -311,6 +311,111 @@ async fn chat_completion(
     Ok(content)
 }
 
+/// 默认会话目录：可执行文件所在目录下的 `.bz-chat`。
+fn default_chat_dir() -> Result<PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|error| error.to_string())?;
+    let parent = exe
+        .parent()
+        .ok_or_else(|| "无法定位可执行文件所在目录".to_string())?;
+    Ok(parent.join(".bz-chat"))
+}
+
+/// 校验会话目录：必须存在且为目录，否则返回错误。
+fn resolve_chat_dir(dir: &str) -> Result<PathBuf, String> {
+    let path = Path::new(dir);
+    if !path.is_dir() {
+        return Err("会话目录不存在或不是目录".into());
+    }
+    Ok(path.to_path_buf())
+}
+
+/// 校验会话文件名：仅允许安全字符，杜绝路径穿越与非法文件名。
+fn is_safe_session_filename(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && !name.starts_with('.')
+}
+
+/// 从会话目录读取会话文件名（去掉 .json 后缀），并按更新时间倒序排列。
+fn list_session_ids(dir: &Path) -> Result<Vec<String>, String> {
+    let mut ids = Vec::new();
+    let entries = std::fs::read_dir(dir).map_err(|error| error.to_string())?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else { continue };
+        if !file_type.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().map(|v| v.to_string_lossy().into_owned()) else {
+            continue;
+        };
+        if !name.ends_with(".json") {
+            continue;
+        }
+        let id = name.trim_end_matches(".json").to_string();
+        if !is_safe_session_filename(&id) {
+            continue;
+        }
+        ids.push(id);
+    }
+    Ok(ids)
+}
+
+/// 返回默认会话保存目录（可执行文件所在目录下的 `.bz-chat`）。
+#[tauri::command]
+fn get_default_chat_dir() -> Result<String, String> {
+    Ok(default_chat_dir()?.to_string_lossy().into_owned())
+}
+
+/// 读取会话目录下所有会话的完整内容（文件名 + JSON 文本）。
+/// 目录不存在时返回空列表。
+#[tauri::command]
+fn read_chat_sessions(dir: String) -> Result<Vec<ProjectFileEntry>, String> {
+    let path = Path::new(&dir);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let root = resolve_chat_dir(&dir)?;
+    let ids = list_session_ids(&root)?;
+    let mut files = Vec::with_capacity(ids.len());
+    for id in ids {
+        let file_path = root.join(format!("{id}.json"));
+        if let Ok(content) = std::fs::read_to_string(&file_path) {
+            files.push(ProjectFileEntry { relative_path: id, content });
+        }
+    }
+    Ok(files)
+}
+
+/// 将单个会话写入会话目录下的 `{id}.json`，父目录不存在时自动创建。
+#[tauri::command]
+fn write_chat_session(dir: String, id: String, content: String) -> Result<(), String> {
+    if !is_safe_session_filename(&id) {
+        return Err("会话 id 不合法".into());
+    }
+    let root = resolve_chat_dir(&dir)?;
+    std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    let target = root.join(format!("{id}.json"));
+    std::fs::write(&target, content).map_err(|error| error.to_string())
+}
+
+/// 删除会话目录下的 `{id}.json`；文件不存在时视为成功。
+#[tauri::command]
+fn delete_chat_session(dir: String, id: String) -> Result<(), String> {
+    if !is_safe_session_filename(&id) {
+        return Err("会话 id 不合法".into());
+    }
+    let root = resolve_chat_dir(&dir)?;
+    let target = root.join(format!("{id}.json"));
+    if target.exists() {
+        if !target.is_file() {
+            return Err("目标路径不是文件".into());
+        }
+        std::fs::remove_file(&target).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -325,7 +430,11 @@ pub fn run() {
             reset_error_log,
             append_error_log,
             read_error_log,
-            chat_completion
+            chat_completion,
+            get_default_chat_dir,
+            read_chat_sessions,
+            write_chat_session,
+            delete_chat_session
         ])
         .run(tauri::generate_context!())
         .expect("failed to run baize-next-destop");

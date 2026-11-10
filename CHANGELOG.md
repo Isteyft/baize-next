@@ -2,6 +2,18 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   feat(destop): AI 对话窗口标题栏移入右侧对话列，侧边栏独立占满整个窗口高度，不再横跨侧边栏上方。
+
+-   feat(destop): 设置界面改为 TAB 分页布局，分为「软件（语言/主题）」「Mod（Meta/mod 预加载）」「AI（大模型配置/会话保存位置）」三个标签页。
+-   fix(destop): AI 对话窗口订阅主题变更事件，跨窗口切换主题色时实时生效。
+-   feat(destop): AI 对话窗口布局调整，侧边栏占满窗口高度，右侧为消息区与输入框。
+
+-   feat(destop): AI 对话界面新增可折叠侧边栏会话管理，支持新建/切换/删除/重命名/搜索会话，每轮对话自动持久化。
+-   feat(destop): 新增会话保存位置设置，可在设置页选择目录或恢复默认（软件目录下的 .bz-chat）。
+-   feat(destop): 后端新增 get_default_chat_dir / read_chat_sessions / write_chat_session / delete_chat_session 命令，会话以 JSON 文件存于指定目录。
+-   feat(destop): 新增会话数据模型与设置持久化模块（chatSession、chatSettings），存储键 baize-next.chat-settings 纳入设置白名单。
+-   test(destop): 补充会话序列化/校验/标题推导、读写封装与保存位置设置的 Vitest 用例。
+
 -   feat(destop): 顶部菜单栏在「文件」与「关于」之间新增「AI」按钮，提供「对话界面」菜单项，打开独立 AI 对话窗口。
 -   fix(destop): AI 对话请求失败时同步写入错误日志，来源标识带模型名；Rust 转发增加 Base URL 合法性校验，缺少协议时返回可操作的错误提示而非笼统的 builder error。
 -   feat(destop): 新增模型 Base URL 规范化，保存时自动补 https:// 前缀并去尾斜杠，避免 reqwest 因缺少协议抛 builder error。
