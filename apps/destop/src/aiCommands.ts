@@ -26,6 +26,8 @@ export interface AiCommand {
     groupKey: ProjectModGroupKey
     /** 生成记录时需注入的 SeidMeta 数据集名称列表；记录含 `seid` 字段的分组才需要。 */
     seidMetaDatasets?: string[]
+    /** 递归补写的依赖记录（如功法引用的 buff）可能用到的额外 SeidMeta，键为 dataKey、值为该 dataKey 下的 SeidMeta 数据集名列表。 */
+    extraSeidMetaDatasets?: Record<string, string[]>
     /** 指令专属的自定义提示词（留空待扩展）；非空时会作为「自定义提示」段落注入到该指令的上下文最前面。 */
     customPrompt?: string
 }
@@ -51,6 +53,11 @@ export const AI_COMMANDS: AiCommand[] = [
         description: '生成一条功法记录（含 seid）',
         groupKey: 'skill',
         seidMetaDatasets: ['StaticSkillSeidMeta'],
+        extraSeidMetaDatasets: {
+            buff: ['BuffSeidMeta'],
+            itemUse: ['ItemUseSeidMeta'],
+            itemEquip: ['ItemEquipSeidMeta'],
+        },
         customPrompt:
             '功法是让玩家战斗时，获得指定的一个或者多个buff，通过buff来完成功法的具体效果，所以生成功法需要生成关于此功法的配套buff。',
     },
@@ -101,9 +108,15 @@ export function filterAiCommands(commands: AiCommand[], query: string): AiComman
 }
 
 /** 序列化单个 Seid 定义（属性类型、描述与可选项）。 */
-function formatSeidDefinition(definition: SeidMetaDefinition, datasets: JsonDataset[], records: SeidDrawerRecords): string {
+function formatSeidDefinition(
+    definition: SeidMetaDefinition,
+    datasets: JsonDataset[],
+    records: SeidDrawerRecords,
+    dataKey?: string
+): string {
+    const dataKeyHint = dataKey ? `（dataKey=\`${dataKey}\`）` : ''
     const lines: string[] = [
-        `- Seid id=${definition.id}「${definition.name}」（write_seid 时 seidId 填 ${definition.id}，参数对象键：${definition.idField}）`,
+        `- Seid id=${definition.id}「${definition.name}」${dataKeyHint}（write_seid 时 seidId 填 ${definition.id}，参数对象键：${definition.idField}）`,
     ]
     if (definition.description) lines.push(`  - 说明：${definition.description}`)
     for (const property of definition.properties) {
@@ -199,7 +212,20 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
             sections.push(
                 `记录通过 \`seid\` 字段引用 Seid（值为 Seid 数字 id 数组），Seid 参数通过 \`write_seid\` 工具写入，seidId 必须用下方列出的 Seid 数字 id，参数对象以 Seid 的 idField 作为键。${dataKeyHint}`
             )
-            sections.push(...definitions.map(definition => formatSeidDefinition(definition, datasets, records)))
+            sections.push(...definitions.map(definition => formatSeidDefinition(definition, datasets, records, seidDataKey)))
+        }
+    }
+
+    // 注入递归补写的依赖记录（如功法引用的 buff、buff 引用的物品）可用的额外 SeidMeta。
+    if (command.extraSeidMetaDatasets) {
+        for (const [dataKey, datasetNames] of Object.entries(command.extraSeidMetaDatasets)) {
+            const definitions = datasetNames.flatMap(name => getSeidDefinitions(datasets, name))
+            if (definitions.length === 0) continue
+            sections.push(`## 依赖记录可用 Seid 定义（dataKey=\`${dataKey}\`）`)
+            sections.push(
+                `若递归补写了属于 dataKey=\`${dataKey}\` 的依赖记录（如 buff、物品），其 Seid 参数用 \`write_seid\` 写入且 dataKey 必须填 \`${dataKey}\`，seidId 用下方数字 id。`
+            )
+            sections.push(...definitions.map(definition => formatSeidDefinition(definition, datasets, records, dataKey)))
         }
     }
 

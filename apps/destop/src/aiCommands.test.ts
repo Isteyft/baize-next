@@ -54,6 +54,11 @@ describe('AI_COMMANDS', () => {
         const npcType = AI_COMMANDS.find(command => command.id === 'npcType')!
         expect(npcType.seidMetaDatasets).toBeUndefined()
     })
+
+    it('declares extra SeidMeta datasets for cascaded dependencies (skill -> buff)', () => {
+        const skill = AI_COMMANDS.find(command => command.id === 'skill')!
+        expect(skill.extraSeidMetaDatasets?.buff).toContain('BuffSeidMeta')
+    })
 })
 
 describe('filterAiCommands', () => {
@@ -100,6 +105,31 @@ describe('buildCommandContext', () => {
         const command = AI_COMMANDS.find(item => item.id === 'npcType')!
         const context = buildCommandContext(command, [])
         expect(context).not.toContain('可用 Seid 定义')
+    })
+
+    it('injects extra Seid definitions for cascaded dependencies with their dataKey', () => {
+        const buffSeidDataset: JsonDataset = {
+            id: 'buff-seid',
+            name: 'BuffSeidMeta',
+            kind: 'file',
+            records: [
+                {
+                    key: '1',
+                    data: {
+                        ID: 1,
+                        IDName: 'buffid',
+                        Name: 'Buff effect',
+                        Desc: 'Buff test',
+                        Properties: [{ ID: 'value1', Type: 'Int', Desc: 'Amount' }],
+                    },
+                },
+            ],
+        }
+        const command = AI_COMMANDS.find(item => item.id === 'skill')!
+        const context = buildCommandContext(command, [buffSeidDataset])
+        expect(context).toContain('依赖记录可用 Seid 定义（dataKey=`buff`）')
+        expect(context).toContain('Seid id=1「Buff effect」')
+        expect(context).toContain('dataKey=`buff`')
     })
 
     it('guides tool-based generation with cascading dependencies', () => {
