@@ -1,7 +1,7 @@
 import type { JsonDataset } from '@baize-next/types'
 import { describe, expect, it } from 'vitest'
 
-import { AI_COMMANDS, buildCommandContext, filterAiCommands } from './aiCommands'
+import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from './aiCommands'
 
 const ELEMENT_DATASET: JsonDataset = {
     id: 'element',
@@ -120,5 +120,20 @@ describe('buildCommandContext', () => {
         // 功法名字段是 name，主键是 id。
         expect(context).toMatch(/- name（字符串）/)
         expect(context).toContain('- id（数字）：记录主键，务必填写')
+    })
+
+    it('injects custom prompt section when a command has a non-empty customPrompt', () => {
+        const command: AiCommand = { ...AI_COMMANDS.find(item => item.id === 'skill')!, customPrompt: '偏好火属性攻击型功法' }
+        const context = buildCommandContext(command, [])
+        expect(context).toContain('## 自定义提示')
+        expect(context).toContain('偏好火属性攻击型功法')
+        // 自定义提示应注入在任务说明之后、目标分组之前。
+        expect(context.indexOf('## 自定义提示')).toBeLessThan(context.indexOf('## 目标分组'))
+    })
+
+    it('does not include custom prompt section for empty customPrompt', () => {
+        const command = AI_COMMANDS.find(item => item.id === 'npcType')!
+        const context = buildCommandContext(command, [])
+        expect(context).not.toContain('## 自定义提示')
     })
 })

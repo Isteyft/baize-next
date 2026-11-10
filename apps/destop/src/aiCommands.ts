@@ -26,6 +26,8 @@ export interface AiCommand {
     groupKey: ProjectModGroupKey
     /** 生成记录时需注入的 SeidMeta 数据集名称列表；记录含 `seid` 字段的分组才需要。 */
     seidMetaDatasets?: string[]
+    /** 指令专属的自定义提示词（留空待扩展）；非空时会作为「自定义提示」段落注入到该指令的上下文最前面。 */
+    customPrompt?: string
 }
 
 /**
@@ -40,6 +42,7 @@ export const AI_COMMANDS: AiCommand[] = [
         description: '生成一条 buff 记录（含 seid）',
         groupKey: 'buff',
         seidMetaDatasets: ['BuffSeidMeta'],
+        customPrompt: '',
     },
     {
         id: 'skill',
@@ -48,6 +51,7 @@ export const AI_COMMANDS: AiCommand[] = [
         description: '生成一条功法记录（含 seid）',
         groupKey: 'skill',
         seidMetaDatasets: ['StaticSkillSeidMeta'],
+        customPrompt: '生成功法时，需要生成一个或多个buff来完成这个功法。',
     },
     {
         id: 'shenTong',
@@ -56,6 +60,7 @@ export const AI_COMMANDS: AiCommand[] = [
         description: '生成一条神通记录（含 seid）',
         groupKey: 'shenTong',
         seidMetaDatasets: ['SkillSeidMeta'],
+        customPrompt: '',
     },
     {
         id: 'item',
@@ -64,6 +69,7 @@ export const AI_COMMANDS: AiCommand[] = [
         description: '生成一条物品记录（含 seid）',
         groupKey: 'item',
         seidMetaDatasets: ['ItemEquipSeidMeta', 'ItemUseSeidMeta'],
+        customPrompt: '',
     },
     {
         id: 'wuDao',
@@ -72,8 +78,16 @@ export const AI_COMMANDS: AiCommand[] = [
         description: '生成一条悟道记录（含 seid）',
         groupKey: 'wuDao',
         seidMetaDatasets: ['StaticSkillSeidMeta'],
+        customPrompt: '',
     },
-    { id: 'npcType', keyword: '写NPC类型', label: '写 NPC 类型', description: '生成一条 NPC 类型记录', groupKey: 'npcType' },
+    {
+        id: 'npcType',
+        keyword: '写NPC类型',
+        label: '写 NPC 类型',
+        description: '生成一条 NPC 类型记录',
+        groupKey: 'npcType',
+        customPrompt: '',
+    },
 ]
 
 /** 根据输入片段过滤指令；空片段返回全部。 */
@@ -156,6 +170,10 @@ function buildFieldSchemaSection(groupKey: ProjectModGroupKey): string[] {
 export function buildCommandContext(command: AiCommand, datasets: JsonDataset[], seidRecords?: SeidDrawerRecords): string {
     const records = seidRecords ?? { buff: [], skill: [], staticSkill: [], item: [] }
     const sections: string[] = [`任务：${command.description}。请通过提供的工具（function calling）完成生成。`]
+
+    if (command.customPrompt && command.customPrompt.trim()) {
+        sections.push(`## 自定义提示\n${command.customPrompt.trim()}`)
+    }
 
     sections.push(`## 目标分组：${command.groupKey}`)
 

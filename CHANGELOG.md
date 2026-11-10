@@ -2,6 +2,7 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   feat(destop): AI 指令新增专属自定义提示词位。① AiCommand 接口新增 `customPrompt?: string` 字段（留空待扩展）；② 六个内置指令（写 buff / 写功法 / 写神通 / 写物品 / 写悟道 / 写 NPC 类型）均补 `customPrompt: ''` 占位；③ buildCommandContext 开头注入非空 customPrompt 作为「## 自定义提示」段落，方便按指令独立扩展提示词。aiCommands 10 用例通过，tsc 通过。
 -   fix(destop): AI 对话体验三项修复。① 思考态改为「思考中…x 秒」实时计时：新增 thinkingStartedAt 状态在发送/重试时记录起点，streaming 期间每秒 tick 刷新秒数，结束后清零；② 「应用到 mod」按钮持久化：会话消息新增 generated 字段，persistCurrentSession 落盘时保留，normalizeChatSession 校验并恢复，重新进入会话后按钮不再消失；③ ask_user 弹窗允许留空确认：去掉确定按钮的必填禁用，留空提交时回传「用户未填写，请自行决定」给 AI，并增加留空提示文案。补充 generated 持久化 2 个用例，全仓 244 用例通过，tsc/lint 通过。
 -   feat(destop): AI 对话改为真正的流式输出，边生成边显示（含思考过程）。根因：Rust `chat_completion` 固定 `stream:false` 一次性返回，前端 `chatCompletionStream` 拿到完整文本后一次性 onDelta，整个等待期只显示「思考中…」，用户无法判断是否卡住。修复：① Rust 新增 `chat_completion_stream` 命令，`stream:true` 走 SSE，逐行解析 `data:` 块，提取 `delta.content` 与思考内容 `delta.reasoning_content`/`delta.reasoning`，通过 `tauri::ipc::Channel` 实时推给前端（reqwest 加 stream feature、futures-util 依赖）；② 前端 `chatCompletionStream` 改用 `Channel` 接收增量并逐块 onDelta。cargo check/tsc/lint 通过，278 用例通过。
 -   fix(destop): 预加载大量 JSON 时主线程同步解析导致窗口「未响应」。根因：`parseProjectFromEntries`/`parseMetaEntriesFromEntries` 在 UI 主线程同步 `JSON.parse` 每个文件，数据量大时长时间阻塞渲染。修复：新增 `yieldToMainThread`（requestAnimationFrame 优先、setTimeout 兜底），两个解析函数改为每处理 500 条记录/文件就让出一次主线程，让加载动画持续渲染、系统不判定未响应；`parseMetaEntriesFromEntries` 由同步改为 async，App.tsx 调用点加 await。tsc/lint 通过，278 用例通过。
