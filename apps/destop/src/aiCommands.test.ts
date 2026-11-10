@@ -1,7 +1,7 @@
 import type { JsonDataset } from '@baize-next/types'
 import { describe, expect, it } from 'vitest'
 
-import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from './aiCommands'
+import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands, findCommandByGroupKey } from './aiCommands'
 
 const ELEMENT_DATASET: JsonDataset = {
     id: 'element',
@@ -76,6 +76,20 @@ describe('filterAiCommands', () => {
     })
 })
 
+describe('findCommandByGroupKey', () => {
+    it('maps buff group to 写 buff command', () => {
+        expect(findCommandByGroupKey(AI_COMMANDS, 'buff')?.id).toBe('buff')
+    })
+
+    it('maps skill group to 写功法 command', () => {
+        expect(findCommandByGroupKey(AI_COMMANDS, 'skill')?.id).toBe('skill')
+    })
+
+    it('returns undefined for a group without a command', () => {
+        expect(findCommandByGroupKey(AI_COMMANDS, 'npcWuDao')).toBeUndefined()
+    })
+})
+
 describe('buildCommandContext', () => {
     it('builds field enum context for a group command', () => {
         const command = AI_COMMANDS.find(item => item.id === 'item')!
@@ -138,7 +152,7 @@ describe('buildCommandContext', () => {
         expect(context).toContain('生成方式（使用工具）')
         expect(context).toContain('create_record')
         expect(context).toContain('write_seid')
-        expect(context).toContain('递归')
+        expect(context).toContain('delegate_record')
         expect(context).toContain('ask_user')
     })
 

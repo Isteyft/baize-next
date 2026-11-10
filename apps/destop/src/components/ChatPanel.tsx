@@ -3,10 +3,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { chatCompletionStream, chatCompletionWithTools, type ChatMessage } from '../ai'
 import { createDefaultToolExecutor, type ExistingRecordIndex, runToolCalls } from '../aiAgent'
-import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from '../aiCommands'
+import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands, findCommandByGroupKey } from '../aiCommands'
 import { type GeneratedResult, parseGeneratedResult, serializeGeneratedResult } from '../aiGeneration'
 import { type AiModelConfig, getSavedAiModels, subscribeAiModels } from '../aiModels'
-import { type AskUserArgs, buildToolDefinitions, createAgentAccumulator, GLOBAL_SYSTEM_PROMPT } from '../aiTools'
+import {
+    type AgentAccumulator,
+    type AskUserArgs,
+    buildToolDefinitions,
+    createAgentAccumulator,
+    type DelegateRecordArgs,
+    GLOBAL_SYSTEM_PROMPT,
+    mergeAccumulator,
+    parseDelegateRecordArgs,
+    parseToolArguments,
+} from '../aiTools'
 import {
     type ChatSession,
     type ChatSessionMessage,
@@ -42,6 +52,7 @@ const APPLY_CANCEL_TEXT = '取消'
 const REFERENCE_TEXT = '引用'
 const REFERENCED_TEXT = '已引用'
 const AGENT_MAX_ROUNDS = 12
+const DELEGATE_MAX_DEPTH = 3
 
 interface DisplayMessage extends ChatMessage {
     id: string
@@ -254,15 +265,34 @@ export function ChatPanel({
         resolver?.(null)
     }
 
-    /** 执行一轮 agent 循环：带工具能力地调用模型，处理工具调用直到模型结束或问用户。 */
+    /** 委托子会话生成一条依赖记录（如功法配套的 buff），复用「写 X」指令的完整上下文。返回子会话累积器。 */
+    async function runDelegation(model: AiModelConfig, args: DelegateRecordArgs, depth: number): Promise<AgentAccumulator | null> {
+        const groupKey = args.group as AiCommand['groupKey']
+        const command = findCommandByGroupKey(AI_COMMANDS, groupKey)
+        if (!command) return null
+
+        // 构建子会话上下文：该指令的完整字段 schema + 枚举 + SeidMeta，外加需求描述。
+        const context = buildCommandContext(command, metaDatasets, seidRecords)
+        const subMessages: ChatMessage[] = [
+            { role: 'system', content: context },
+            { role: 'user', content: args.requirement },
+        ]
+
+        // 子循环独立累积器，结果由调用方合并回主累积器。
+        return runAgentLoop(model, subMessages, undefined, undefined, depth)
+    }
+
+    /** 执行一轮 agent 循环：带工具能力地调用模型，处理工具调用直到模型结束或问用户。返回累积的生成结果。 */
     async function runAgentLoop(
         model: AiModelConfig,
         baseMessages: ChatMessage[],
-        onFinal: (content: string, generated: GeneratedResult | null) => void
-    ): Promise<void> {
+        onFinal?: (content: string, generated: GeneratedResult | null) => void,
+        initialAcc?: AgentAccumulator,
+        depth = 0
+    ): Promise<AgentAccumulator> {
         const tools = buildToolDefinitions()
         const executor = createDefaultToolExecutor(existingRecords)
-        let acc = createAgentAccumulator()
+        let acc = initialAcc ?? createAgentAccumulator()
         // 完整消息序列（含 tool 消息），随循环增长。
         let loopMessages: ChatMessage[] = [...baseMessages]
         let finalText = ''
@@ -276,9 +306,39 @@ export function ChatPanel({
                 break
             }
 
-            // 处理工具调用。
-            const { next, askUser, feedbacks } = runToolCalls(acc, result.toolCalls, executor)
+            // 分离 delegate_record 调用，其余交给同步执行器。
+            const delegateCalls = result.toolCalls.filter(call => call.function?.name === 'delegate_record')
+            const otherCalls = result.toolCalls.filter(call => call.function?.name !== 'delegate_record')
+
+            // 先处理普通工具调用。
+            const { next, askUser, feedbacks } = runToolCalls(acc, otherCalls, executor)
             acc = next
+
+            // 逐条处理 delegate_record：异步起子会话，把子会话结果合并回主累积器。
+            const delegateFeedbacks = new Map<string, string>()
+            for (const call of delegateCalls) {
+                const parsed = parseToolArguments(call.function?.arguments ?? '{}')
+                if (!parsed) {
+                    delegateFeedbacks.set(call.id, 'delegate_record 参数非法：工具参数不是合法 JSON')
+                    continue
+                }
+                const raw = parseDelegateRecordArgs(parsed)
+                if (!raw) {
+                    delegateFeedbacks.set(call.id, 'delegate_record 参数非法：缺少 group 或 requirement')
+                    continue
+                }
+                if (depth >= DELEGATE_MAX_DEPTH) {
+                    delegateFeedbacks.set(call.id, `delegate_record 已达最大嵌套深度 ${DELEGATE_MAX_DEPTH}，请改用 create_record 直接生成`)
+                    continue
+                }
+                const subAcc = await runDelegation(model, raw, depth + 1)
+                if (!subAcc) {
+                    delegateFeedbacks.set(call.id, `delegate_record 失败：分组 ${raw.group} 没有对应的生成指令`)
+                    continue
+                }
+                acc = mergeAccumulator(acc, subAcc)
+                delegateFeedbacks.set(call.id, `已委托子会话生成 ${raw.group} 分组 ${subAcc.records.length} 条记录`)
+            }
 
             // 若本轮请求向用户提问，弹窗并等待，把回答作为 tool 结果回传。
             let askAnswer: string | null = null
@@ -299,7 +359,9 @@ export function ChatPanel({
             const toolMessages: ChatMessage[] = result.toolCalls.map(call => {
                 let content: string
                 const feedback = feedbacks.find(item => item.callId === call.id)
-                if (call.function?.name === 'ask_user') {
+                if (call.function?.name === 'delegate_record') {
+                    content = delegateFeedbacks.get(call.id) ?? ''
+                } else if (call.function?.name === 'ask_user') {
                     content = askAnswer && askAnswer.trim() !== '' ? askAnswer : '用户未填写，请自行决定'
                 } else {
                     content = feedback?.content ?? ''
@@ -311,7 +373,8 @@ export function ChatPanel({
         }
 
         const generated = acc.records.length > 0 ? ({ records: acc.records, seidData: acc.seidData } as GeneratedResult) : null
-        onFinal(finalText, generated)
+        onFinal?.(finalText, generated)
+        return acc
     }
 
     async function handleSend(): Promise<void> {

@@ -63,6 +63,14 @@ export interface WriteSeidArgs {
     params: Record<string, JsonValue>
 }
 
+/** delegate_record 工具参数：把一条依赖记录（如功法配套的 buff）委托给对应指令的子会话生成。 */
+export interface DelegateRecordArgs {
+    /** 依赖记录的分组，取值 buff/item/skill/shenTong/wuDao（须存在对应指令）。 */
+    group: string
+    /** 需求描述，交给子会话的写 X 指令生成。 */
+    requirement: string
+}
+
 /** agent 循环中累积的生成结果（与最终应用到 mod 的结构一致）。 */
 export interface AgentAccumulator {
     records: GeneratedRecord[]
@@ -95,6 +103,27 @@ export function accumulateSeid(acc: AgentAccumulator, args: WriteSeidArgs): Agen
 /** 将累积器转换为可直接应用到 mod 的 GeneratedResult。 */
 export function accumulatorToResult(acc: AgentAccumulator): GeneratedResult {
     return { records: acc.records, seidData: acc.seidData }
+}
+
+/** 将子累积器合并进主累积器：记录按分组+key 去重覆盖，Seid 参数按 dataKey/seidId/targetKey 深合并。 */
+export function mergeAccumulator(target: AgentAccumulator, source: AgentAccumulator): AgentAccumulator {
+    let records = target.records
+    for (const record of source.records) {
+        records = accumulateRecord({ records, seidData: {} }, record).records
+    }
+    const seidData = { ...target.seidData }
+    for (const [dataKey, files] of Object.entries(source.seidData)) {
+        const targetFiles = { ...(seidData[dataKey] ?? {}) }
+        for (const [seidId, seidRecords] of Object.entries(files)) {
+            const targetSeidRecords = { ...(targetFiles[seidId] ?? {}) }
+            for (const [targetKey, params] of Object.entries(seidRecords)) {
+                targetSeidRecords[targetKey] = params
+            }
+            targetFiles[seidId] = targetSeidRecords
+        }
+        seidData[dataKey] = targetFiles
+    }
+    return { records, seidData }
 }
 
 /** 判断累积器是否有可落库的内容。 */
@@ -205,6 +234,14 @@ export function parseAskUserArgs(raw: Record<string, unknown>): AskUserArgs | nu
     return { question: raw.question, kind, options }
 }
 
+/** 解析 delegate_record 工具参数。 */
+export function parseDelegateRecordArgs(raw: Record<string, unknown>): DelegateRecordArgs | null {
+    if (typeof raw.group !== 'string' || raw.group.trim() === '') return null
+    const requirement = typeof raw.requirement === 'string' ? raw.requirement.trim() : ''
+    if (requirement === '') return null
+    return { group: raw.group, requirement }
+}
+
 /**
  * 工具定义（OpenAI function calling schema），随请求发给模型。
  * 模型据此自主决定何时调用 create_record / write_seid / ask_user。
@@ -288,6 +325,25 @@ export function buildToolDefinitions() {
                         options: { type: 'array', items: { type: 'string' }, description: 'kind 为 options 时的候选选项' },
                     },
                     required: ['question'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'delegate_record',
+                description:
+                    '把一条依赖记录（如功法需要配套的 buff）委托给对应指令的子会话来生成。子会话会使用该指令的完整字段与 Seid 上下文生成记录，生成后合并回当前结果。当主记录引用了需要完整 Seid 语义的依赖记录（尤其是 buff）时优先使用本工具，而不是手动 create_record。',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        group: { type: 'string', description: '依赖记录的分组，取值 buff/item/skill/shenTong/wuDao' },
+                        requirement: {
+                            type: 'string',
+                            description: '对这条依赖记录的具体需求描述（如：一个每 3 秒造成灼烧伤害的火系 buff）',
+                        },
+                    },
+                    required: ['group', 'requirement'],
                 },
             },
         },

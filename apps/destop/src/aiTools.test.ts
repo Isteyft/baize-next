@@ -8,8 +8,10 @@ import {
     createAgentAccumulator,
     GLOBAL_SYSTEM_PROMPT,
     hasAccumulatedContent,
+    mergeAccumulator,
     parseAskUserArgs,
     parseCreateRecordArgs,
+    parseDelegateRecordArgs,
     parseSearchRecordArgs,
     parseToolArguments,
     parseWriteSeidArgs,
@@ -147,9 +149,46 @@ describe('accumulator 累积', () => {
 })
 
 describe('buildToolDefinitions', () => {
-    it('包含 create_record / search_record / write_seid / ask_user 四个工具', () => {
+    it('包含 create_record / search_record / write_seid / ask_user / delegate_record 五个工具', () => {
         const tools = buildToolDefinitions()
         const names = tools.map(tool => tool.function.name)
-        expect(names).toEqual(['create_record', 'search_record', 'write_seid', 'ask_user'])
+        expect(names).toEqual(['create_record', 'search_record', 'write_seid', 'ask_user', 'delegate_record'])
+    })
+})
+
+describe('parseDelegateRecordArgs', () => {
+    it('解析合法的 group 与 requirement', () => {
+        expect(parseDelegateRecordArgs({ group: 'buff', requirement: '一个灼烧 buff' })).toEqual({
+            group: 'buff',
+            requirement: '一个灼烧 buff',
+        })
+    })
+
+    it('缺少 requirement 返回 null', () => {
+        expect(parseDelegateRecordArgs({ group: 'buff' })).toBeNull()
+    })
+
+    it('缺少 group 返回 null', () => {
+        expect(parseDelegateRecordArgs({ requirement: '一个灼烧 buff' })).toBeNull()
+    })
+})
+
+describe('mergeAccumulator', () => {
+    it('合并记录与 seid 参数', () => {
+        const target = accumulateRecord(createAgentAccumulator(), { group: 'skill', key: '1', data: { name: '功法' } })
+        let source = createAgentAccumulator()
+        source = accumulateRecord(source, { group: 'buff', key: '100', data: { name: '灼烧' } })
+        source = accumulateSeid(source, { dataKey: 'buff', seidId: '3', targetKey: '100', params: { value1: 5 } })
+        const merged = mergeAccumulator(target, source)
+        expect(merged.records).toHaveLength(2)
+        expect(merged.seidData.buff?.['3']?.['100']).toEqual({ value1: 5 })
+    })
+
+    it('同 key 同分组记录被覆盖', () => {
+        const target = accumulateRecord(createAgentAccumulator(), { group: 'buff', key: '100', data: { name: '旧' } })
+        const source = accumulateRecord(createAgentAccumulator(), { group: 'buff', key: '100', data: { name: '新' } })
+        const merged = mergeAccumulator(target, source)
+        expect(merged.records).toHaveLength(1)
+        expect(merged.records[0].data.name).toBe('新')
     })
 })

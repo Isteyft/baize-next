@@ -107,6 +107,11 @@ export function filterAiCommands(commands: AiCommand[], query: string): AiComman
     )
 }
 
+/** 按分组键查找对应指令（用于子会话委托：把依赖记录分组映射到「写 X」指令）。 */
+export function findCommandByGroupKey(commands: AiCommand[], groupKey: ProjectModGroupKey): AiCommand | undefined {
+    return commands.find(command => command.groupKey === groupKey)
+}
+
 /** 序列化单个 Seid 定义（属性类型、描述与可选项）。 */
 function formatSeidDefinition(
     definition: SeidMetaDefinition,
@@ -236,7 +241,7 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
             '1. 生成前，若内容涉及引用已有 buff/功法/神通/物品（例如功法需要引用某个 buff、效果需要叠加某个已有 buff 等），先调用 `search_record` 工具查询对应分组，确认是否已有可复用的记录。',
             '2. 查到已有记录时，直接引用其主键 id（如 buffid、id），不要重复新建；查不到时才新建。',
             '3. 用 `create_record` 工具写入主记录（目标分组），`key` 使用主键字段值（buff→buffid，功法/神通/物品/悟道→id），与 data 中的主键字段一致。',
-            '4. 若主记录引用了其它 buff/物品（如功法引用了 buff、buff 又引用了物品），请递归地用 `create_record` 补写这些被引用的依赖记录。',
+            '4. 若主记录引用了其它 buff/物品（如功法引用了 buff、buff 又引用了物品），请用 `delegate_record` 工具把每条依赖记录委托给对应指令的子会话来生成（例如功法配套的 buff → delegate_record group=buff），子会话会用该分组的完整字段与 Seid 上下文生成；不要手动 create_record 这些依赖记录。',
             '5. 对每条含 seid 的记录，用 `write_seid` 工具写入每个 Seid 的参数，`seidId` 用上文 Seid 定义里列出的数字 id，`dataKey` 按上文提示（buff→buff，神通→skill，功法/悟道→staticSkill，物品→itemUse/itemEquip），`targetKey` 与该记录的 key 一致。',
             '6. 若缺少生成所需的必要信息（尤其是 id 用多少），请优先调用 `ask_user` 工具向用户询问，而不是随意编造 id。',
             '7. 全部生成完成后，用一句简短的中文说明生成结果。',
