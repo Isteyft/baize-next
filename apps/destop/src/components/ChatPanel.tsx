@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { chatCompletionStream, type ChatMessage } from '../ai'
 import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from '../aiCommands'
+import { type GeneratedResult, parseGeneratedResult } from '../aiGeneration'
 import { type AiModelConfig, getSavedAiModels } from '../aiModels'
 import {
     type ChatSession,
@@ -32,11 +33,17 @@ const COLLAPSE_TITLE = '收起侧边栏'
 const SYSTEM_PROMPT = '你是一个乐于助人的助手。'
 const COMMAND_TRIGGER = '/'
 const COMMAND_NO_MATCH_TEXT = '没有匹配的指令'
+const APPLY_TEXT = '应用到 mod'
+const APPLY_PREVIEW_TITLE = '确认应用到 mod'
+const APPLY_CONFIRM_TEXT = '确认应用'
+const APPLY_CANCEL_TEXT = '取消'
 
 interface DisplayMessage extends ChatMessage {
     id: string
     pending?: boolean
     error?: string
+    /** 该消息若为指令生成结果，缓存解析出的可应用结果。 */
+    generated?: GeneratedResult | null
 }
 
 function createMessageId(): string {
@@ -58,10 +65,12 @@ interface ChatPanelProps {
     metaDatasets?: JsonDataset[]
     /** Seid 属性引用解析用的记录抽屉。 */
     seidRecords?: SeidDrawerRecords
+    /** 将 AI 生成结果应用到当前 mod；无选中 mod 时返回 false。 */
+    onApplyGenerated?: (result: GeneratedResult) => boolean
 }
 
 /** 内嵌在主窗口右侧的 AI 对话面板。 */
-export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords }: ChatPanelProps) {
+export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords, onApplyGenerated }: ChatPanelProps) {
     const [models] = useState<AiModelConfig[]>(getSavedAiModels)
     const [modelId, setModelId] = useState<string>('')
     const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -73,6 +82,7 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
     const [commandQuery, setCommandQuery] = useState('')
     const [commandIndex, setCommandIndex] = useState(0)
     const [activeCommand, setActiveCommand] = useState<AiCommand | null>(null)
+    const [applyTarget, setApplyTarget] = useState<GeneratedResult | null>(null)
     const listRef = useRef<HTMLDivElement>(null)
     const abortRef = useRef<AbortController | null>(null)
     const chatDirRef = useRef<string>('')
@@ -189,7 +199,8 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
         setStreaming(true)
         persistCurrentSession(next)
 
-        // 捕获并消费当前指令上下文，随后清除，回到普通对话。
+        // 捕获并消费当前指令，随后清除，回到普通对话。
+        const commandForSend = activeCommand
         const systemMessages = buildSystemMessages()
         setActiveCommand(null)
 
@@ -222,11 +233,14 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
             abortRef.current = null
         }
 
-        // 流式结束后，用最终内容落盘一次。
+        // 流式结束后，用最终内容落盘一次，并尝试解析指令生成结果。
         setMessages(previous => {
-            const finalMessages = previous.map(item =>
-                item.id === assistantId && !item.error ? { ...item, content: accumulated || '（无回复）', pending: false } : item
-            )
+            const finalMessages = previous.map(item => {
+                if (item.id !== assistantId || item.error) return item
+                const content = accumulated || '（无回复）'
+                const generated = commandForSend ? parseGeneratedResult(content, commandForSend.groupKey ?? undefined) : null
+                return { ...item, content, pending: false, generated }
+            })
             persistCurrentSession(finalMessages)
             return finalMessages
         })
@@ -306,6 +320,21 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
     function handleStop(): void {
         abortRef.current?.abort()
         setStreaming(false)
+    }
+
+    /** 打开应用预览弹窗。 */
+    function handleOpenApply(result: GeneratedResult): void {
+        setApplyTarget(result)
+    }
+
+    /** 确认应用：调用父组件写回，成功后关闭弹窗；无 mod 时提示。 */
+    function handleConfirmApply(): void {
+        if (!applyTarget || !onApplyGenerated) return
+        const applied = onApplyGenerated(applyTarget)
+        setApplyTarget(null)
+        if (!applied) {
+            void appendErrorLog('AI 应用到 mod', new Error('未选中任何 mod，请先在左侧选择一个 mod 后再应用'))
+        }
     }
 
     async function handleRetry(messageId: string): Promise<void> {
@@ -452,6 +481,18 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
                                                 </button>
                                             </div>
                                         ) : null}
+                                        {message.generated ? (
+                                            <div className="mt-2 flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenApply(message.generated!)}
+                                                    className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover"
+                                                >
+                                                    {APPLY_TEXT}
+                                                </button>
+                                                <span className="text-xs text-ink-subtle">{message.generated.records.length} 条记录</span>
+                                            </div>
+                                        ) : null}
                                     </div>
                                 </div>
                             )
@@ -555,6 +596,69 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
                     </div>
                 </div>
             </footer>
+
+            {applyTarget ? (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-6"
+                    role="presentation"
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setApplyTarget(null)
+                    }}
+                >
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={APPLY_PREVIEW_TITLE}
+                        className="flex max-h-[min(640px,calc(100vh-48px))] w-[min(560px,calc(100vw-48px))] flex-col overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="flex shrink-0 items-center justify-between border-b border-line px-4 py-3">
+                            <h3 className="text-base font-semibold text-ink">{APPLY_PREVIEW_TITLE}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setApplyTarget(null)}
+                                className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft hover:bg-hover"
+                            >
+                                {APPLY_CANCEL_TEXT}
+                            </button>
+                        </header>
+                        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                            <p className="mb-3 text-sm text-ink-subtle">将写入 {applyTarget.records.length} 条记录到当前 mod，请确认：</p>
+                            <ul className="space-y-2">
+                                {applyTarget.records.map((record, index) => (
+                                    <li
+                                        key={`${record.group}-${record.key}-${index}`}
+                                        className="rounded-md border border-line bg-raised px-3 py-2"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span className="rounded bg-accent-soft px-1.5 py-0.5 text-xs text-accent">{record.group}</span>
+                                            <span className="text-sm font-medium text-ink">{record.key}</span>
+                                            <span className="text-sm text-ink-soft">
+                                                {typeof record.data.name === 'string' ? record.data.name : ''}
+                                            </span>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-3">
+                            <button
+                                type="button"
+                                onClick={() => setApplyTarget(null)}
+                                className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft hover:bg-hover"
+                            >
+                                {APPLY_CANCEL_TEXT}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmApply}
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                {APPLY_CONFIRM_TEXT}
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            ) : null}
         </div>
     )
 }

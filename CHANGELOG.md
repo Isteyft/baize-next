@@ -2,6 +2,7 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   feat(destop): AI 生成结果支持应用到 mod。① 新增 aiGeneration 模块：extractJsonObject 容错提取 AI 回复中的 JSON，parseGeneratedResult 解析 records + seidData 多记录结构，applyGeneratedResultToProject 纯函数批量写回（规范化记录 + 插入/覆盖分组 + 写 Seid 参数并补 data.seid 数组）；② 指令输出协议升级为多记录结构，支持级联生成（功法→依赖 buff→buff 的 seid 递归）；③ ChatPanel 指令模式下解析回复，助手气泡显示「应用到 mod」按钮，点击弹预览确认，确认后经 onApplyGenerated 写回当前选中 mod（无 mod 时记错误日志）；④ App.tsx 新增 handleApplyGenerated。
 -   feat(destop): 指令选择新增可视化入口——输入框下方左侧显示「选择指令」按钮（未选时）或指令 chip 标签（选中时，可点击 × 移除），点击按钮同样弹出指令列表；指令不再写入输入框文本，而是作为独立的 activeCommand 状态以 chip 展示，发送时作为 system 上下文注入并在发送后清除。
 -   feat(destop): 聊天面板新增 slash 指令系统，输入 `/` 弹出指令选择（写 buff / 写功法 / 写神通 / 写物品 / 写悟道 / 写 NPC 类型），选中后自动将该分组的字段枚举与 SeidMeta 定义作为 system 上下文注入大模型请求，生成完整记录（含 seid 字段）。
 -   feat(destop): 新增 aiCommands 模块，定义指令列表、指令过滤与上下文构建（buildCommandContext），按分组读取字段枚举 meta 并注入对应 SeidMeta 定义。

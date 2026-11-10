@@ -132,7 +132,30 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
         }
     }
 
-    sections.push('## 输出要求\n请输出一条完整的记录 JSON 对象，字段名与类型遵循上述说明；`seid` 字段填写选用的 Seid 数字 id 数组。')
+    sections.push(
+        [
+            '## 输出格式要求',
+            '请输出一个 JSON 对象，包含 `records` 数组与 `seidData` 对象：',
+            '```',
+            '{',
+            '  "records": [',
+            '    { "group": "skill", "key": "10001", "data": { "Skill_ID": 10001, "name": "火剑诀", "seid": [7] } },',
+            '    { "group": "buff", "key": "20001", "data": { "buffid": 20001, "name": "灼烧", "seid": [3] } }',
+            '  ],',
+            '  "seidData": {',
+            '    "staticSkill": { "7": { "10001": { "skillid": 10001, "value1": 10 } } },',
+            '    "buff": { "3": { "20001": { "buffid": 20001, "value1": 5 } } }',
+            '  }',
+            '}',
+            '```',
+            '规则：',
+            '1. `records` 第一项为主记录（目标分组），后续为它引用的依赖记录（如 buff、物品），group 取值仅限 buff/item/skill/shenTong/wuDao。',
+            '2. 若主记录或依赖记录引用了其它 buff/物品，请递归地把这些被引用记录一并加入 `records`，并为它们各自的 seid 补写 `seidData`，直到不再产生新依赖。',
+            '3. `key` 使用记录的主键字段值（buff→buffid，功法/神通→Skill_ID，物品→id）。',
+            '4. `seidData` 的目录名（buff/skill/staticSkill/itemUse/itemEquip）与 Seid 所属分组对应，参数对象以该 Seid 的 idField 作为键。',
+            '5. 除 JSON 外不要输出任何解释文字。',
+        ].join('\n')
+    )
 
     return sections.join('\n\n')
 }

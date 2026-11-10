@@ -16,6 +16,7 @@ import { getCurrentWindow, LogicalSize, type Window } from '@tauri-apps/api/wind
 import { open } from '@tauri-apps/plugin-dialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { applyGeneratedResultToProject, type GeneratedResult } from './aiGeneration'
 import { ChatPanel } from './components/ChatPanel'
 import { DataTable } from './components/DataTable'
 import { ErrorDetailModal } from './components/ErrorDetailModal'
@@ -740,6 +741,24 @@ export default function App() {
         setProjects(previous => previous.map(item => (item.id === selection.projectId ? updateProjectSeid(item) : item)))
     }
 
+    /**
+     * 将 AI 生成结果批量应用到当前选中的 mod。
+     * 无选中 mod 时返回 false（由调用方提示用户先选择 mod）。
+     */
+    function handleApplyGenerated(result: GeneratedResult): boolean {
+        if (!selection) return false
+        const targetModId = selection.modId
+        const applyToProject = (item: ProjectData): ProjectData => applyGeneratedResultToProject(item, targetModId, result)
+
+        if (selection.kind === 'preload') {
+            setPreloadProjects(previous => previous.map(item => (item.id === selection.projectId ? applyToProject(item) : item)))
+        } else {
+            markProjectDirty(selection.projectId)
+            setProjects(previous => previous.map(item => (item.id === selection.projectId ? applyToProject(item) : item)))
+        }
+        return true
+    }
+
     async function saveProjectToDisk(target: ProjectData): Promise<number> {
         const rootPath = projectRootPaths[target.id]
         if (!rootPath) throw new Error(`项目 ${target.name} 没有可写入的根目录`)
@@ -958,6 +977,7 @@ export default function App() {
                             onClose={() => void handleOpenChat()}
                             metaDatasets={metaDatasets}
                             seidRecords={seidDrawerRecords}
+                            onApplyGenerated={handleApplyGenerated}
                         />
                     </>
                 ) : null}
