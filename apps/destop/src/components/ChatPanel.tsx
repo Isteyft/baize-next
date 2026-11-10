@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import type { JsonDataset } from '@baize-next/types'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { chatCompletionStream, type ChatMessage } from '../ai'
+import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from '../aiCommands'
 import { type AiModelConfig, getSavedAiModels } from '../aiModels'
 import {
     type ChatSession,
@@ -15,18 +17,21 @@ import {
 import { resolveChatDir } from '../chatSettings'
 import { appendErrorLog } from '../errorLog'
 import { subscribeTheme } from '../theme'
+import type { SeidDrawerRecords } from '../utils/seid'
 import { ChatSidebar } from './ChatSidebar'
 import { Select, type SelectOption } from './Select'
 
 const MODEL_PLACEHOLDER = '请选择模型'
 const EMPTY_MODEL_TEXT = '尚未配置模型，请先在「设置 → 大模型配置」中添加'
-const INPUT_PLACEHOLDER = '输入消息…'
+const INPUT_PLACEHOLDER = '输入消息，输入 / 使用指令…'
 const SEND_TEXT = '发送'
 const STOP_TEXT = '停止'
 const RETRY_TEXT = '重试'
 const EMPTY_HISTORY_TEXT = '开始一段新的对话吧'
 const COLLAPSE_TITLE = '收起侧边栏'
 const SYSTEM_PROMPT = '你是一个乐于助人的助手。'
+const COMMAND_TRIGGER = '/'
+const COMMAND_NO_MATCH_TEXT = '没有匹配的指令'
 
 interface DisplayMessage extends ChatMessage {
     id: string
@@ -49,10 +54,14 @@ interface ChatPanelProps {
     width?: number
     /** 关闭（收起）聊天侧边栏，由父组件控制窗口宽度与显隐。 */
     onClose: () => void
+    /** 已预加载的 meta 数据集，供指令注入字段枚举与 SeidMeta 上下文。 */
+    metaDatasets?: JsonDataset[]
+    /** Seid 属性引用解析用的记录抽屉。 */
+    seidRecords?: SeidDrawerRecords
 }
 
 /** 内嵌在主窗口右侧的 AI 对话面板。 */
-export function ChatPanel({ width = 360, onClose }: ChatPanelProps) {
+export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords }: ChatPanelProps) {
     const [models] = useState<AiModelConfig[]>(getSavedAiModels)
     const [modelId, setModelId] = useState<string>('')
     const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -60,9 +69,17 @@ export function ChatPanel({ width = 360, onClose }: ChatPanelProps) {
     const [messages, setMessages] = useState<DisplayMessage[]>([])
     const [input, setInput] = useState('')
     const [streaming, setStreaming] = useState(false)
+    const [commandOpen, setCommandOpen] = useState(false)
+    const [commandQuery, setCommandQuery] = useState('')
+    const [commandIndex, setCommandIndex] = useState(0)
+    const [activeCommand, setActiveCommand] = useState<AiCommand | null>(null)
     const listRef = useRef<HTMLDivElement>(null)
     const abortRef = useRef<AbortController | null>(null)
     const chatDirRef = useRef<string>('')
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const footerRef = useRef<HTMLElement>(null)
+
+    const commandCandidates = useMemo(() => filterAiCommands(AI_COMMANDS, commandQuery), [commandQuery])
 
     const currentModel = models.find(item => item.id === modelId) ?? null
     const modelOptions: SelectOption<string>[] = models.map(item => ({ value: item.id, label: item.name }))
@@ -102,6 +119,18 @@ export function ChatPanel({ width = 360, onClose }: ChatPanelProps) {
         if (el) el.scrollTop = el.scrollHeight
     }, [messages])
 
+    // 点击 footer 外部时关闭指令弹窗。
+    useEffect(() => {
+        if (!commandOpen) return
+        const handlePointerDown = (event: MouseEvent): void => {
+            if (footerRef.current && !footerRef.current.contains(event.target as Node)) {
+                setCommandOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handlePointerDown)
+        return () => document.removeEventListener('mousedown', handlePointerDown)
+    }, [commandOpen])
+
     function replaceMessage(id: string, patch: Partial<DisplayMessage>): void {
         setMessages(previous => previous.map(item => (item.id === id ? { ...item, ...patch } : item)))
     }
@@ -132,6 +161,16 @@ export function ChatPanel({ width = 360, onClose }: ChatPanelProps) {
         void writeChatSession(chatDirRef.current, updated)
     }
 
+    /** 组装发送给模型的 system 消息：基础提示 + 选中指令的 meta 上下文。 */
+    function buildSystemMessages(): ChatMessage[] {
+        const messages: ChatMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }]
+        if (activeCommand) {
+            const context = buildCommandContext(activeCommand, metaDatasets, seidRecords)
+            if (context) messages.push({ role: 'system', content: context })
+        }
+        return messages
+    }
+
     async function handleSend(): Promise<void> {
         const text = input.trim()
         if (!text || !currentModel || streaming) return
@@ -150,13 +189,17 @@ export function ChatPanel({ width = 360, onClose }: ChatPanelProps) {
         setStreaming(true)
         persistCurrentSession(next)
 
+        // 捕获并消费当前指令上下文，随后清除，回到普通对话。
+        const systemMessages = buildSystemMessages()
+        setActiveCommand(null)
+
         const history = messages.filter(item => item.role === 'user' || item.role === 'assistant')
         const abort = new AbortController()
         abortRef.current = abort
 
         let accumulated = ''
         try {
-            await chatCompletionStream(currentModel, [{ role: 'system', content: SYSTEM_PROMPT }, ...history, userMessage], {
+            await chatCompletionStream(currentModel, [...systemMessages, ...history, userMessage], {
                 onDelta: delta => {
                     accumulated += delta
                     replaceMessage(assistantId, { content: accumulated, pending: false })
@@ -187,6 +230,77 @@ export function ChatPanel({ width = 360, onClose }: ChatPanelProps) {
             persistCurrentSession(finalMessages)
             return finalMessages
         })
+    }
+
+    /** 选中一条指令：记录为 activeCommand 并关闭弹窗，指令以 chip 展示、不写入输入框文本。 */
+    function handleSelectCommand(command: AiCommand): void {
+        setActiveCommand(command)
+        setCommandOpen(false)
+        setCommandQuery('')
+        setCommandIndex(0)
+        // 若输入框内残留以 / 开头的指令标记，移除它，仅保留自然语言需求。
+        const slashIndex = input.lastIndexOf(COMMAND_TRIGGER)
+        if (slashIndex >= 0) {
+            setInput(input.slice(0, slashIndex).trimEnd())
+        }
+        textareaRef.current?.focus()
+    }
+
+    /** 清除当前选中的指令。 */
+    function handleClearCommand(): void {
+        setActiveCommand(null)
+    }
+
+    /** 点击「选择指令」按钮打开指令弹窗（不带 / 前缀，展示全部指令）。 */
+    function handleOpenCommandPicker(): void {
+        setCommandQuery('')
+        setCommandIndex(0)
+        setCommandOpen(true)
+    }
+
+    /** 输入变化时更新内容，并判断是否触发 / 打开指令弹窗。 */
+    function handleInputChange(value: string): void {
+        setInput(value)
+        const slashIndex = value.lastIndexOf(COMMAND_TRIGGER)
+        if (slashIndex >= 0) {
+            setCommandQuery(value.slice(slashIndex + 1))
+            setCommandOpen(true)
+            setCommandIndex(0)
+        } else {
+            setCommandOpen(false)
+        }
+    }
+
+    /** 处理输入框键盘事件：指令弹窗打开时拦截上下键与 Enter/Esc。 */
+    function handleInputKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+        if (commandOpen) {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setCommandIndex(index => Math.min(index + 1, commandCandidates.length - 1))
+                return
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setCommandIndex(index => Math.max(index - 1, 0))
+                return
+            }
+            if (event.key === 'Enter' && !event.shiftKey) {
+                const command = commandCandidates[commandIndex]
+                if (command) {
+                    event.preventDefault()
+                    handleSelectCommand(command)
+                }
+                return
+            }
+            if (event.key === 'Escape') {
+                setCommandOpen(false)
+                return
+            }
+        }
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            void handleSend()
+        }
     }
 
     function handleStop(): void {
@@ -346,53 +460,99 @@ export function ChatPanel({ width = 360, onClose }: ChatPanelProps) {
                 )}
             </main>
 
-            <footer className="flex shrink-0 flex-col gap-2 border-t border-line bg-panel p-3">
+            <footer ref={footerRef} className="relative flex shrink-0 flex-col gap-2 border-t border-line bg-panel p-3">
+                {commandOpen ? (
+                    <div className="absolute bottom-full left-3 right-3 z-30 mb-1 overflow-hidden rounded-lg border border-line-strong bg-raised shadow-xl">
+                        <div className="max-h-64 overflow-y-auto py-1">
+                            {commandCandidates.length === 0 ? (
+                                <p className="px-3 py-2 text-xs text-ink-subtle">{COMMAND_NO_MATCH_TEXT}</p>
+                            ) : (
+                                commandCandidates.map((command, index) => (
+                                    <button
+                                        key={command.id}
+                                        type="button"
+                                        onMouseEnter={() => setCommandIndex(index)}
+                                        onClick={() => handleSelectCommand(command)}
+                                        className={`flex w-full flex-col gap-0.5 px-3 py-2 text-left ${
+                                            index === commandIndex ? 'bg-accent-soft' : 'hover:bg-hover'
+                                        }`}
+                                    >
+                                        <span className="text-sm text-ink">/{command.keyword}</span>
+                                        <span className="text-xs text-ink-subtle">{command.description}</span>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                ) : null}
                 <textarea
+                    ref={textareaRef}
                     value={input}
-                    onChange={event => setInput(event.target.value)}
-                    onKeyDown={event => {
-                        if (event.key === 'Enter' && !event.shiftKey) {
-                            event.preventDefault()
-                            void handleSend()
-                        }
-                    }}
+                    onChange={event => handleInputChange(event.target.value)}
+                    onKeyDown={handleInputKeyDown}
                     placeholder={INPUT_PLACEHOLDER}
                     disabled={!currentModel}
                     rows={4}
                     className="min-h-24 w-full resize-none rounded-md border border-line bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none disabled:opacity-50"
                 />
-                <div className="flex items-center justify-end gap-2">
-                    <div className="w-36 shrink-0">
-                        {models.length > 0 ? (
-                            <Select
-                                value={modelId}
-                                options={modelOptions}
-                                onChange={setModelId}
-                                placeholder={MODEL_PLACEHOLDER}
-                                aria-label="选择模型"
-                                direction="up"
-                                compact
-                            />
-                        ) : null}
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        {activeCommand ? (
+                            <span className="flex max-w-[220px] items-center gap-1.5 rounded-full border border-accent bg-accent-soft px-2.5 py-1 text-xs text-accent">
+                                <span className="font-medium">/{activeCommand.keyword}</span>
+                                <button
+                                    type="button"
+                                    onClick={handleClearCommand}
+                                    aria-label="移除指令"
+                                    className="flex h-4 w-4 items-center justify-center rounded-full text-accent transition-colors hover:bg-accent hover:text-accent-ink"
+                                >
+                                    ×
+                                </button>
+                            </span>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={handleOpenCommandPicker}
+                                className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs text-ink-soft transition-colors hover:border-accent hover:text-accent"
+                            >
+                                <span className="text-xs leading-none">/</span>
+                                选择指令
+                            </button>
+                        )}
                     </div>
-                    {streaming ? (
-                        <button
-                            type="button"
-                            onClick={handleStop}
-                            className="h-7 rounded-md bg-danger px-3 text-xs font-medium text-white transition-colors hover:opacity-90"
-                        >
-                            {STOP_TEXT}
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={() => void handleSend()}
-                            disabled={!currentModel || !input.trim()}
-                            className="h-7 rounded-md bg-accent px-3 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {SEND_TEXT}
-                        </button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-2">
+                        <div className="w-36 shrink-0">
+                            {models.length > 0 ? (
+                                <Select
+                                    value={modelId}
+                                    options={modelOptions}
+                                    onChange={setModelId}
+                                    placeholder={MODEL_PLACEHOLDER}
+                                    aria-label="选择模型"
+                                    direction="up"
+                                    compact
+                                />
+                            ) : null}
+                        </div>
+                        {streaming ? (
+                            <button
+                                type="button"
+                                onClick={handleStop}
+                                className="h-7 rounded-md bg-danger px-3 text-xs font-medium text-white transition-colors hover:opacity-90"
+                            >
+                                {STOP_TEXT}
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => void handleSend()}
+                                disabled={!currentModel || !input.trim()}
+                                className="h-7 rounded-md bg-accent px-3 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {SEND_TEXT}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </footer>
         </div>

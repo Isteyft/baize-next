@@ -2,6 +2,10 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   feat(destop): 指令选择新增可视化入口——输入框下方左侧显示「选择指令」按钮（未选时）或指令 chip 标签（选中时，可点击 × 移除），点击按钮同样弹出指令列表；指令不再写入输入框文本，而是作为独立的 activeCommand 状态以 chip 展示，发送时作为 system 上下文注入并在发送后清除。
+-   feat(destop): 聊天面板新增 slash 指令系统，输入 `/` 弹出指令选择（写 buff / 写功法 / 写神通 / 写物品 / 写悟道 / 写 NPC 类型），选中后自动将该分组的字段枚举与 SeidMeta 定义作为 system 上下文注入大模型请求，生成完整记录（含 seid 字段）。
+-   feat(destop): 新增 aiCommands 模块，定义指令列表、指令过滤与上下文构建（buildCommandContext），按分组读取字段枚举 meta 并注入对应 SeidMeta 定义。
+-   test(destop): 补充指令过滤、字段枚举上下文与 SeidMeta 注入的 Vitest 用例。
 -   feat(destop): AI 对话由独立窗口改为内嵌主窗口右侧的聊天面板，点击「AI → 对话界面」展开面板并同步加宽主窗口，面板顶部提供会话列表（弹出层）与新会话，模型选择移至发送按钮左侧。
 -   refactor(destop): 将 ChatWindow 改造为 ChatPanel 内嵌组件，侧边栏重写为「会话列表下拉 + 新会话按钮」形态，移除独立 chat 窗口入口与 ChatWindow 组件。
 -   feat(destop): 主界面各栏（左侧栏 / 数据表 / JSON 编辑 / 聊天面板）之间新增可拖拽分隔条，支持手动调整各栏宽度；LeftPanel/JsonEditor/ChatPanel 宽度改为受控 state，窗口加宽量随聊天面板宽度自适应。

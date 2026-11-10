@@ -953,7 +953,12 @@ export default function App() {
                 {chatOpen ? (
                     <>
                         <Resizer onResize={delta => handleChatPanelWidth(Math.max(160, chatPanelWidthRef.current + delta))} />
-                        <ChatPanel width={chatPanelWidth} onClose={() => void handleOpenChat()} />
+                        <ChatPanel
+                            width={chatPanelWidth}
+                            onClose={() => void handleOpenChat()}
+                            metaDatasets={metaDatasets}
+                            seidRecords={seidDrawerRecords}
+                        />
                     </>
                 ) : null}
             </main>
