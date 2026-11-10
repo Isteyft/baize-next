@@ -285,7 +285,7 @@ export default function App() {
                         entry.mode === PreloadSourceMode.Json
                             ? [await invoke<ProjectFileEntry>('read_json_file', { path: entry.path })]
                             : await invoke<ProjectFileEntry[]>('read_project_files', { rootPath: entry.path })
-                    loadedMeta.push(...parseMetaEntriesFromEntries(files))
+                    loadedMeta.push(...(await parseMetaEntriesFromEntries(files)))
                 } catch (error) {
                     recordError(`meta-preload ${entry.path}`, error)
                 }

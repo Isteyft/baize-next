@@ -900,6 +900,23 @@ function throwProjectLoadErrors(projectName: string, errors: JsonProjectLoadErro
     throw new Error(errors.map(({ file, detail }) => `${file}\n项目：${projectName}\n${detail}`).join('\n\n'))
 }
 
+/**
+ * 让出主线程，让浏览器有机会处理渲染与用户交互，避免大批量同步解析时
+ * 窗口被操作系统判定为「未响应」。在异步循环中周期性 await 即可。
+ */
+function yieldToMainThread(): Promise<void> {
+    return new Promise(resolve => {
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => resolve())
+        } else {
+            setTimeout(resolve, 0)
+        }
+    })
+}
+
+/** 每解析多少条记录让出一次主线程。 */
+const YIELD_EVERY = 500
+
 /** 取相对路径的文件名并去掉 .json 后缀，用于数据集命名。 */
 function fileBaseName(relativePath: string): string {
     const fileName = relativePath.split('/').pop() ?? 'root'
@@ -916,7 +933,9 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
     const modDirectories = new Map<string, string>()
     const seidDataByMod = new Map<string, ProjectSeidData>()
 
-    for (const entry of entries) {
+    for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+        if (entryIndex > 0 && entryIndex % YIELD_EVERY === 0) await yieldToMainThread()
+        const entry = entries[entryIndex]!
         const parts = entry.relativePath.split('/').filter(Boolean)
         const match = matchProjectFile(parts)
         if (match) {
@@ -945,6 +964,7 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
     }
 
     const mods: ProjectMod[] = []
+    let parsedRecordCount = 0
     for (const [modName, groupFiles] of grouped) {
         const groups: ProjectModGroup[] = []
 
@@ -965,9 +985,11 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
                     try {
                         const dataset = parseJsonContent(fileBaseName(entry.relativePath), entry.content)
                         records.push(...dataset.records)
+                        parsedRecordCount += dataset.records.length
                     } catch (error) {
                         captureProjectLoadError(errors, entry.relativePath, error)
                     }
+                    if (parsedRecordCount > 0 && parsedRecordCount % YIELD_EVERY === 0) await yieldToMainThread()
                 }
             } else {
                 for (const entry of bucket) {
@@ -978,9 +1000,11 @@ export async function parseProjectFromEntries(rootPath: string, entries: Project
                             throw new Error(`文件 ${fileName} 不是对象，无法作为记录`)
                         }
                         records.push({ key: resolveRecordKey(parsed, fileName), data: parsed })
+                        parsedRecordCount += 1
                     } catch (error) {
                         captureProjectLoadError(errors, entry.relativePath, error)
                     }
+                    if (parsedRecordCount > 0 && parsedRecordCount % YIELD_EVERY === 0) await yieldToMainThread()
                 }
             }
 
@@ -1018,8 +1042,13 @@ export function parseMetaJsonEntry(entry: ProjectFileEntry): JsonDataset {
 }
 
 /** 将目录中的 Meta JSON 归纳为枚举式数据集。 */
-export function parseMetaEntriesFromEntries(entries: ProjectFileEntry[]): JsonDataset[] {
-    return entries.map(entry => parseMetaJsonEntry(entry))
+export async function parseMetaEntriesFromEntries(entries: ProjectFileEntry[]): Promise<JsonDataset[]> {
+    const datasets: JsonDataset[] = []
+    for (let index = 0; index < entries.length; index += 1) {
+        if (index > 0 && index % YIELD_EVERY === 0) await yieldToMainThread()
+        datasets.push(parseMetaJsonEntry(entries[index]!))
+    }
+    return datasets
 }
 
 /** 读取 Meta 记录用于跨来源合并的业务 ID。 */
