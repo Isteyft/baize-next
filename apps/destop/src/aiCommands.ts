@@ -112,6 +112,9 @@ export function findCommandByGroupKey(commands: AiCommand[], groupKey: ProjectMo
     return commands.find(command => command.groupKey === groupKey)
 }
 
+/** AI 上下文中每个 Seid 属性「可选值」的最大数量，超出时截断并提示走 search_record 查询，避免全量记录撑爆上下文。 */
+const SEID_OPTION_LIMIT = 30
+
 /** 序列化单个 Seid 定义（属性类型、描述与可选项）。 */
 function formatSeidDefinition(
     definition: SeidMetaDefinition,
@@ -125,12 +128,23 @@ function formatSeidDefinition(
     ]
     if (definition.description) lines.push(`  - 说明：${definition.description}`)
     for (const property of definition.properties) {
-        const options = getSeidPropertyOptions(property, datasets, records, [definition])
-        const optionText = options.length > 0 ? `，可选值：${options.map(option => String(option.id)).join(' / ')}` : ''
-        lines.push(`  - ${property.id}（${property.type}）：${property.description}${optionText}`)
+        const options = getSeidPropertyOptions(property, datasets, records, [definition], SEID_OPTION_LIMIT + 1)
+        const truncated = options.length > SEID_OPTION_LIMIT
+        const shown = truncated ? options.slice(0, SEID_OPTION_LIMIT) : options
+        const optionText = shown.length > 0 ? `，可选值：${shown.map(option => String(option.id)).join(' / ')}` : ''
+        const overflowHint = truncated
+            ? `（共 ${options.length} 项，仅列出前 ${SEID_OPTION_LIMIT} 项，其余请用 \`search_record\` 查询）`
+            : ''
+        lines.push(`  - ${property.id}（${property.type}）：${property.description}${optionText}${overflowHint}`)
     }
     return lines.join('\n')
 }
+
+/** 字段枚举说明中每个字段最多列出的选项数，超出截断并提示 search_record，避免 SeidMeta 等大数据集全量展开。 */
+const FIELD_ENUM_LIMIT = 40
+
+/** 绑定 SeidMeta 数据集的字段（seid/Affix/Affix2），这些字段的取值即 Seid 定义，已在 Seid 定义段专门展开，此处跳过避免重复。 */
+const SEID_META_ENUM_FIELDS = new Set(['seid', 'Affix', 'Affix2'])
 
 /** 构建分组的字段枚举说明。 */
 function buildFieldEnumSection(groupKey: ProjectModGroupKey, datasets: JsonDataset[]): string[] {
@@ -138,10 +152,13 @@ function buildFieldEnumSection(groupKey: ProjectModGroupKey, datasets: JsonDatas
     if (!enumFields) return []
     const lines: string[] = []
     for (const field of Object.keys(enumFields)) {
+        if (SEID_META_ENUM_FIELDS.has(field)) continue
         const options = getGroupEnumOptions(groupKey, field, datasets)
         if (options.length === 0) continue
         lines.push(`- ${field}：可选取值`)
-        for (const option of options) lines.push(`  - ${String(option.id)}：${option.label}`)
+        const shown = options.slice(0, FIELD_ENUM_LIMIT)
+        for (const option of shown) lines.push(`  - ${String(option.id)}：${option.label}`)
+        if (options.length > FIELD_ENUM_LIMIT) lines.push(`  - …（共 ${options.length} 项，其余请用 \`search_record\` 查询）`)
     }
     return lines
 }

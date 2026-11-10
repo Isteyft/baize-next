@@ -185,10 +185,11 @@ function recordId(record: JsonRecord): number | string {
 }
 
 /** 将主记录列表转换成可直接展示的 Seid 选项。 */
-export function getSeidRecordOptions(records: JsonRecord[]): SeidOption[] {
+export function getSeidRecordOptions(records: JsonRecord[], limit?: number): SeidOption[] {
     const options: SeidOption[] = []
     const seen = new Set<string>()
     for (const record of records) {
+        if (limit !== undefined && options.length >= limit) break
         const id = recordId(record)
         const value = String(id)
         if (seen.has(value)) continue
@@ -208,20 +209,21 @@ function getMetaDrawerOptions(datasets: JsonDataset[], drawer: string): SeidOpti
     return getMetaStringOptions(datasets, datasetName).map(option => ({ id: option.value, value: option.value, label: option.label }))
 }
 
-/** 根据 SpecialDrawer 解析一个 Seid 属性的选项来源。 */
+/** 根据 SpecialDrawer 解析一个 Seid 属性的选项来源。limit 用于限制记录类选项数量（AI 上下文用），不传则不截断（UI 用）。 */
 export function getSeidPropertyOptions(
     property: SeidMetaProperty,
     datasets: JsonDataset[],
     records: SeidDrawerRecords,
-    definitions: SeidMetaDefinition[]
+    definitions: SeidMetaDefinition[],
+    limit?: number
 ): SeidOption[] {
     for (const drawer of property.drawers) {
         const metaOptions = getMetaDrawerOptions(datasets, drawer)
         if (metaOptions.length > 0) return metaOptions
-        if (drawer.startsWith('Buff')) return getSeidRecordOptions(records.buff)
-        if (drawer.startsWith('StaticSkill')) return getSeidRecordOptions(records.staticSkill)
-        if (drawer.startsWith('Skill')) return getSeidRecordOptions(records.skill)
-        if (drawer.startsWith('Item')) return getSeidRecordOptions(records.item)
+        if (drawer.startsWith('Buff')) return getSeidRecordOptions(records.buff, limit)
+        if (drawer.startsWith('StaticSkill')) return getSeidRecordOptions(records.staticSkill, limit)
+        if (drawer.startsWith('Skill')) return getSeidRecordOptions(records.skill, limit)
+        if (drawer.startsWith('Item')) return getSeidRecordOptions(records.item, limit)
         if (drawer.startsWith('Seid')) {
             return definitions.map(definition => ({
                 id: definition.id,

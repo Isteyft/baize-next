@@ -180,4 +180,62 @@ describe('buildCommandContext', () => {
         const context = buildCommandContext(command, [])
         expect(context).not.toContain('## 自定义提示')
     })
+
+    it('skips seid/Affix fields in field enum section to avoid duplicate full expansion', () => {
+        // 造一个 StaticSkillSeidMeta 数据集，验证功法字段枚举里不会把 seid/Affix 当普通枚举全量列出。
+        const staticSkillSeidDataset: JsonDataset = {
+            id: 'static-skill-seid',
+            name: 'StaticSkillSeidMeta',
+            kind: 'file',
+            records: [
+                { key: '100', data: { ID: 100, IDName: 'id', Name: '功法效果', Desc: '测试' } },
+                { key: '101', data: { ID: 101, IDName: 'id', Name: '功法效果2', Desc: '测试2' } },
+            ],
+        }
+        const command = AI_COMMANDS.find(item => item.id === 'skill')!
+        const context = buildCommandContext(command, [staticSkillSeidDataset], {
+            buff: [],
+            skill: [],
+            staticSkill: [],
+            item: [],
+        })
+        // seid/Affix 字段不应作为「可选取值」枚举展开（其 Seid 定义已在 Seid 段处理）。
+        expect(context).not.toMatch(/- seid：可选取值/)
+        expect(context).not.toMatch(/- Affix：可选取值/)
+    })
+
+    it('truncates Seid property record options to the configured limit', () => {
+        // 造 40 条 buff 记录，验证 Seid 属性的记录类可选值被截断到 SEID_OPTION_LIMIT。
+        const buffRecords = Array.from({ length: 40 }, (_, index) => ({
+            key: String(index),
+            data: { buffid: index, name: `buff${index}` },
+        }))
+        const buffSeidDataset: JsonDataset = {
+            id: 'buff-seid',
+            name: 'BuffSeidMeta',
+            kind: 'file',
+            records: [
+                {
+                    key: '1',
+                    data: {
+                        ID: 1,
+                        IDName: 'buffid',
+                        Name: 'Buff effect',
+                        Desc: 'Buff test',
+                        Properties: [{ ID: 'value1', Type: 'Int', Desc: 'Amount', SpecialDrawer: ['BuffTypeDrawer'] }],
+                    },
+                },
+            ],
+        }
+        const command = AI_COMMANDS.find(item => item.id === 'buff')!
+        const context = buildCommandContext(command, [buffSeidDataset], {
+            buff: buffRecords,
+            skill: [],
+            staticSkill: [],
+            item: [],
+        })
+        // 截断提示应出现，且不应列出全部 40 条记录。
+        expect(context).toContain('其余请用 `search_record` 查询')
+        expect(context).not.toContain('buff39')
+    })
 })
