@@ -1,9 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 
-/** 单条会话消息（会话持久化时去除临时字段，只保留 role 与 content）。 */
+import type { GeneratedResult } from './aiGeneration'
+
+/** 单条会话消息（会话持久化时去除临时字段，保留 role、content 与可应用的生成结果）。 */
 export interface ChatSessionMessage {
     role: 'user' | 'assistant'
     content: string
+    /** 指令生成的可应用结果，落盘后重新进入会话仍可「应用到 mod」。 */
+    generated?: GeneratedResult | null
 }
 
 /** 一次完整会话。 */
@@ -35,6 +39,13 @@ export function createChatSession(title = ''): ChatSession {
 /** 默认会话标题（未命名时展示）。 */
 export const DEFAULT_SESSION_TITLE = '新会话'
 
+/** 校验 generated 字段：须为含 records 数组的对象，否则丢弃。 */
+function isGeneratedResult(value: unknown): value is GeneratedResult {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const entry = value as Partial<GeneratedResult>
+    return Array.isArray(entry.records)
+}
+
 function isChatSessionMessage(value: unknown): value is ChatSessionMessage {
     if (!value || typeof value !== 'object') return false
     const entry = value as Partial<ChatSessionMessage>
@@ -45,7 +56,13 @@ function isChatSessionMessage(value: unknown): value is ChatSessionMessage {
 export function normalizeChatSession(id: string, value: unknown): ChatSession | null {
     if (!value || typeof value !== 'object') return null
     const data = value as Partial<ChatSession>
-    const messages = Array.isArray(data.messages) ? data.messages.filter(isChatSessionMessage) : []
+    const messages = Array.isArray(data.messages)
+        ? data.messages.filter(isChatSessionMessage).map(item => ({
+              role: item.role,
+              content: item.content,
+              generated: isGeneratedResult(item.generated) ? item.generated : undefined,
+          }))
+        : []
     const title = typeof data.title === 'string' ? data.title : ''
     const createdAt = typeof data.createdAt === 'number' ? data.createdAt : Date.now()
     const updatedAt = typeof data.updatedAt === 'number' ? data.updatedAt : createdAt

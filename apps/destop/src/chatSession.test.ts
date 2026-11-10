@@ -47,6 +47,21 @@ describe('normalizeChatSession', () => {
         expect(session?.messages).toEqual([{ role: 'user', content: 'ok' }])
     })
 
+    it('保留合法的 generated 字段', () => {
+        const generated = { records: [{ group: 'skill', key: '1', data: { id: 1 } }], seidData: {} }
+        const session = normalizeChatSession('sess-1', {
+            messages: [{ role: 'assistant', content: 'ok', generated }],
+        })
+        expect(session?.messages).toEqual([{ role: 'assistant', content: 'ok', generated }])
+    })
+
+    it('丢弃非法的 generated 字段', () => {
+        const session = normalizeChatSession('sess-1', {
+            messages: [{ role: 'assistant', content: 'ok', generated: 'not-an-object' }],
+        })
+        expect(session?.messages).toEqual([{ role: 'assistant', content: 'ok' }])
+    })
+
     it('非对象返回 null', () => {
         expect(normalizeChatSession('sess-1', 'str')).toBeNull()
         expect(normalizeChatSession('sess-1', null)).toBeNull()

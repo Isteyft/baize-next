@@ -2,6 +2,7 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   fix(destop): AI 对话体验三项修复。① 思考态改为「思考中…x 秒」实时计时：新增 thinkingStartedAt 状态在发送/重试时记录起点，streaming 期间每秒 tick 刷新秒数，结束后清零；② 「应用到 mod」按钮持久化：会话消息新增 generated 字段，persistCurrentSession 落盘时保留，normalizeChatSession 校验并恢复，重新进入会话后按钮不再消失；③ ask_user 弹窗允许留空确认：去掉确定按钮的必填禁用，留空提交时回传「用户未填写，请自行决定」给 AI，并增加留空提示文案。补充 generated 持久化 2 个用例，全仓 244 用例通过，tsc/lint 通过。
 -   feat(destop): AI 对话改为真正的流式输出，边生成边显示（含思考过程）。根因：Rust `chat_completion` 固定 `stream:false` 一次性返回，前端 `chatCompletionStream` 拿到完整文本后一次性 onDelta，整个等待期只显示「思考中…」，用户无法判断是否卡住。修复：① Rust 新增 `chat_completion_stream` 命令，`stream:true` 走 SSE，逐行解析 `data:` 块，提取 `delta.content` 与思考内容 `delta.reasoning_content`/`delta.reasoning`，通过 `tauri::ipc::Channel` 实时推给前端（reqwest 加 stream feature、futures-util 依赖）；② 前端 `chatCompletionStream` 改用 `Channel` 接收增量并逐块 onDelta。cargo check/tsc/lint 通过，278 用例通过。
 -   fix(destop): 预加载大量 JSON 时主线程同步解析导致窗口「未响应」。根因：`parseProjectFromEntries`/`parseMetaEntriesFromEntries` 在 UI 主线程同步 `JSON.parse` 每个文件，数据量大时长时间阻塞渲染。修复：新增 `yieldToMainThread`（requestAnimationFrame 优先、setTimeout 兜底），两个解析函数改为每处理 500 条记录/文件就让出一次主线程，让加载动画持续渲染、系统不判定未响应；`parseMetaEntriesFromEntries` 由同步改为 async，App.tsx 调用点加 await。tsc/lint 通过，278 用例通过。
 -   fix(destop): 侧边栏大模型配置不随设置更新而实时刷新。根因：ChatPanel 用 `useState(getSavedAiModels)` 只初始化一次，设置窗口保存后侧边栏模型列表仍停留在旧值。修复：① aiModels 新增 `subscribeAiModels`（仿 theme/language 的 Tauri event 广播 + localStorage storage 事件兜底）并在 `saveAiModels` 后广播变更；② ChatPanel 改用可订阅 state，订阅回调里 `setModels`，并新增「选中模型被删除后回退到第一个可用模型」的兜底 effect，避免发送按钮永久禁用。补充订阅机制 2 个用例，全仓 278 用例通过，tsc/lint 通过。

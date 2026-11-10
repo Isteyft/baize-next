@@ -97,6 +97,8 @@ export function ChatPanel({
     const [applyTarget, setApplyTarget] = useState<GeneratedResult | null>(null)
     const [askTarget, setAskTarget] = useState<AskUserArgs | null>(null)
     const [askAnswer, setAskAnswer] = useState('')
+    const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null)
+    const [, setThinkingTick] = useState(0)
     const listRef = useRef<HTMLDivElement>(null)
     const abortRef = useRef<AbortController | null>(null)
     const chatDirRef = useRef<string>('')
@@ -158,6 +160,13 @@ export function ChatPanel({
         if (el) el.scrollTop = el.scrollHeight
     }, [messages])
 
+    // 思考状态计时：streaming 期间每秒刷新一次，驱动「思考中…x 秒」显示。
+    useEffect(() => {
+        if (!streaming) return
+        const timer = window.setInterval(() => setThinkingTick(tick => tick + 1), 1000)
+        return () => window.clearInterval(timer)
+    }, [streaming])
+
     // 点击 footer 外部时关闭指令弹窗。
     useEffect(() => {
         if (!commandOpen) return
@@ -179,7 +188,11 @@ export function ChatPanel({
         if (!currentId) return
         const persisted: ChatSessionMessage[] = nextMessages
             .filter((item): item is DisplayMessage => item.role === 'user' || item.role === 'assistant')
-            .map(item => ({ role: item.role as 'user' | 'assistant', content: item.content }))
+            .map(item => ({
+                role: item.role as 'user' | 'assistant',
+                content: item.content,
+                generated: item.generated ?? undefined,
+            }))
         const now = Date.now()
         const title =
             nextMessages.length > 0 && (currentSession?.messages.length ?? 0) === 0
@@ -221,7 +234,7 @@ export function ChatPanel({
         })
     }
 
-    /** 弹窗提交回答：把答案回传给等待中的 agent 循环。 */
+    /** 弹窗提交回答：把答案回传给等待中的 agent 循环。留空时回传空串，由 AI 自行决定。 */
     function handleAskSubmit(): void {
         const resolver = askResolverRef.current
         askResolverRef.current = null
@@ -283,7 +296,7 @@ export function ChatPanel({
                 let content: string
                 const feedback = feedbacks.find(item => item.callId === call.id)
                 if (call.function?.name === 'ask_user') {
-                    content = askAnswer ?? '用户未回答'
+                    content = askAnswer && askAnswer.trim() !== '' ? askAnswer : '用户未填写，请自行决定'
                 } else {
                     content = feedback?.content ?? ''
                 }
@@ -313,6 +326,7 @@ export function ChatPanel({
         setMessages(next)
         setInput('')
         setStreaming(true)
+        setThinkingStartedAt(Date.now())
         persistCurrentSession(next)
 
         // 捕获并消费当前指令，随后清除，回到普通对话。
@@ -377,6 +391,7 @@ export function ChatPanel({
             void appendErrorLog(`AI 对话（${currentModel.name}）`, error)
         } finally {
             setStreaming(false)
+            setThinkingStartedAt(null)
             abortRef.current = null
             finish()
         }
@@ -482,6 +497,7 @@ export function ChatPanel({
             .concat({ id: messageId, role: 'assistant', content: '', pending: true } as DisplayMessage)
         setMessages(next)
         setStreaming(true)
+        setThinkingStartedAt(Date.now())
 
         let accumulated = ''
         try {
@@ -505,6 +521,7 @@ export function ChatPanel({
             void appendErrorLog(`AI 对话（${currentModel.name}）`, error)
         } finally {
             setStreaming(false)
+            setThinkingStartedAt(null)
         }
 
         setMessages(previous => {
@@ -596,7 +613,12 @@ export function ChatPanel({
                                 <div key={message.id} className="flex justify-start">
                                     <div className="max-w-[80%] select-text rounded-lg bg-raised px-3 py-2 text-sm text-ink-soft">
                                         {message.pending && !message.content ? (
-                                            <span className="text-ink-subtle">思考中…</span>
+                                            <span className="text-ink-subtle">
+                                                思考中…
+                                                {thinkingStartedAt
+                                                    ? `${Math.max(1, Math.floor((Date.now() - thinkingStartedAt) / 1000))} 秒`
+                                                    : ''}
+                                            </span>
                                         ) : (
                                             <>
                                                 {message.content ? (
@@ -828,7 +850,8 @@ export function ChatPanel({
                                 </div>
                             ) : (
                                 <input
-                                    type={askTarget.kind === 'number' ? 'number' : 'text'}
+                                    type="text"
+                                    inputMode={askTarget.kind === 'number' ? 'numeric' : undefined}
                                     value={askAnswer}
                                     onChange={event => setAskAnswer(event.target.value)}
                                     onKeyDown={event => {
@@ -838,10 +861,11 @@ export function ChatPanel({
                                         }
                                     }}
                                     autoFocus
-                                    placeholder="请输入"
+                                    placeholder="请输入，留空则自行决定"
                                     className="w-full rounded-md border border-line bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none"
                                 />
                             )}
+                            <p className="text-xs text-ink-subtle">留空直接确认，AI 将自行决定该信息。</p>
                         </div>
                         <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-3">
                             <button
@@ -854,8 +878,7 @@ export function ChatPanel({
                             <button
                                 type="button"
                                 onClick={handleAskSubmit}
-                                disabled={!askAnswer.trim()}
-                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
                             >
                                 {APPLY_CONFIRM_TEXT}
                             </button>
