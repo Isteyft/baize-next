@@ -112,6 +112,55 @@ describe('SeidEditor', () => {
         expect(onUpdateSeidData).toHaveBeenCalledWith('skill', '7', '200', { skillid: 200, value1: [0] })
     })
 
+    it('allows typing values directly into the multi-select input', () => {
+        const onUpdateSeidData = vi.fn()
+        const datasets: JsonDataset[] = [
+            {
+                id: 'skill-seid',
+                name: 'SkillSeidMeta',
+                kind: 'file',
+                records: [
+                    {
+                        key: '7',
+                        data: {
+                            ID: 7,
+                            IDName: 'skillid',
+                            Name: 'Element array',
+                            Desc: 'Element test',
+                            Properties: [{ ID: 'value1', Type: 'IntArray', Desc: 'Elements', SpecialDrawer: ['ElementTypeArrayDrawer'] }],
+                        },
+                    },
+                ],
+            },
+            {
+                id: 'element',
+                name: 'ElementType',
+                kind: 'file',
+                records: [
+                    { key: '0', data: { Id: 0, Desc: 'Gold' } },
+                    { key: '1', data: { Id: 1, Desc: 'Wood' } },
+                ],
+            },
+        ]
+        render(
+            <SeidEditor
+                open
+                groupKey="shenTong"
+                record={{ key: '200', data: { id: 200, name: 'Skill', seid: [7] } }}
+                seidData={{}}
+                metaDatasets={datasets}
+                records={EMPTY_RECORDS}
+                onClose={vi.fn()}
+                onUpdateRecord={vi.fn()}
+                onUpdateSeidData={onUpdateSeidData}
+            />
+        )
+
+        fireEvent.change(screen.getByLabelText('Elements（已选值）'), { target: { value: '1, 0' } })
+        fireEvent.blur(screen.getByLabelText('Elements（已选值）'))
+        expect(onUpdateSeidData).toHaveBeenCalledWith('skill', '7', '200', { skillid: 200, value1: [1, 0] })
+    })
+
     it('removes a Seid and deletes its parameter record', () => {
         const onUpdateRecord = vi.fn()
         const onUpdateSeidData = vi.fn()

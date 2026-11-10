@@ -47,6 +47,17 @@ function valueForOption(option: SeidOption): JsonValue {
     return option.id
 }
 
+function parseSeidTextInput(raw: string, useNumber: boolean): JsonValue[] {
+    return raw
+        .split(/[,，\s]+/)
+        .map(item => item.trim())
+        .filter(Boolean)
+        .map(item => {
+            const parsed = Number(item)
+            return useNumber && Number.isFinite(parsed) ? parsed : item
+        })
+}
+
 function SeidMultiSelect({
     value,
     options,
@@ -60,9 +71,18 @@ function SeidMultiSelect({
 }) {
     const [open, setOpen] = useState(false)
     const [query, setQuery] = useState('')
+    const [text, setText] = useState('')
     const rootRef = useRef<HTMLDivElement>(null)
     const selected = new Set(seidValuesToStrings(value))
     const filtered = query ? options.filter(option => option.label.toLowerCase().includes(query.trim().toLowerCase())) : options
+
+    // 同步文本输入框与当前选中值；输入框聚焦时由用户自由编辑，不覆盖其内容。
+    const values = seidValuesToStrings(value)
+    const useNumber = values.length === 0 || values.some(item => Number.isFinite(Number(item)) && item !== '')
+    const selectedText = values.join(', ')
+    useEffect(() => {
+        setText(selectedText)
+    }, [selectedText])
 
     useEffect(() => {
         if (!open) return
@@ -87,21 +107,38 @@ function SeidMultiSelect({
         onChange(next)
     }
 
+    function commitText(): void {
+        const next = parseSeidTextInput(text, useNumber)
+        onChange(next)
+        setText(next.map(String).join(', '))
+    }
+
     return (
         <div ref={rootRef} className="relative">
-            <button
-                type="button"
-                aria-label={`${label}（${selected.size} 项）`}
-                onClick={() => setOpen(current => !current)}
-                className="flex w-full items-center justify-between gap-2 rounded-md border border-line bg-panel px-2.5 py-2 text-left text-sm text-ink transition-colors hover:bg-hover focus:outline-none"
-            >
-                <span className={selected.size > 0 ? 'text-ink' : 'text-ink-subtle'}>
-                    {selected.size > 0 ? `已选择 ${selected.size} 项` : '请选择'}
-                </span>
-                <span aria-hidden="true" className={`origin-center text-ink-muted transition-transform ${open ? 'rotate-180' : ''}`}>
-                    ▼
-                </span>
-            </button>
+            <div className="flex w-full items-stretch gap-1">
+                <input
+                    type="text"
+                    aria-label={`${label}（已选值）`}
+                    value={text}
+                    onChange={event => setText(event.target.value)}
+                    onBlur={commitText}
+                    onKeyDown={event => {
+                        if (event.key === 'Enter') commitText()
+                    }}
+                    placeholder="输入值，用逗号分隔"
+                    className={`${inputClass} min-w-0 flex-1`}
+                />
+                <button
+                    type="button"
+                    aria-label={`${label}（${selected.size} 项）`}
+                    onClick={() => setOpen(current => !current)}
+                    className="flex shrink-0 items-center justify-center gap-1 rounded-md border border-line bg-panel px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-hover focus:outline-none"
+                >
+                    <span aria-hidden="true" className={`origin-center text-ink-muted transition-transform ${open ? 'rotate-180' : ''}`}>
+                        ▼
+                    </span>
+                </button>
+            </div>
             {open ? (
                 <div className="absolute left-0 right-0 z-[70] mt-1 overflow-hidden rounded-md border border-line-strong bg-raised shadow-xl">
                     <div className="border-b border-line p-2">
