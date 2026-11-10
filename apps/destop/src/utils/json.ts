@@ -1125,6 +1125,22 @@ const SINGLE_FILE_GROUPS = new Set<ProjectModGroupKey>([
     'tuJianChunWenBen',
 ])
 
+/** 顶层对象即记录本身、无需 `{ key: data }` 包装的分组（加载时被归一为单条 `root` 记录）。 */
+const PLAIN_OBJECT_GROUPS = new Set<ProjectModGroupKey>(['config'])
+
+/**
+ * 将单文件分组序列化为顶层 JSON 值。
+ * config 等分组在加载时被归一为单条记录，文件顶层即该记录的 data 本身；
+ * 其余分组按 `{ key: data }` 映射还原。
+ */
+function serializeSingleFileGroup(groupKey: ProjectModGroupKey, records: JsonRecord[]): JsonValue {
+    if (PLAIN_OBJECT_GROUPS.has(groupKey)) {
+        const record = records[0]
+        return record ? normalizeRecordData(groupKey, record.data, record.key) : {}
+    }
+    return recordsToMap(groupKey, records)
+}
+
 /** 每个分组的原始文件位置，用于将编辑结果写回原文件。 */
 function modDirectoryName(modName: string): string {
     return modName.startsWith('mod') ? modName : `mod_${modName}`
@@ -1172,10 +1188,11 @@ export function serializeProjectFiles(project: ProjectData): ProjectFileWrite[] 
 
     for (const mod of project.mods) {
         for (const group of mod.groups) {
+            if (group.records.length === 0) continue
             if (SINGLE_FILE_GROUPS.has(group.key)) {
                 const resolve = SINGLE_FILE_PATHS[group.key]
                 if (!resolve) continue
-                writes.push({ relativePath: resolve(mod.name), content: stringifyJson(recordsToMap(group.key, group.records)) })
+                writes.push({ relativePath: resolve(mod.name), content: stringifyJson(serializeSingleFileGroup(group.key, group.records)) })
                 continue
             }
 

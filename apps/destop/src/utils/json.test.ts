@@ -451,6 +451,36 @@ describe('project JSON mapping', () => {
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/WuDaoAllTypeJson.json')
         expect(paths).toContain('plugins/Next/_/mod_demo/Data/WuDaoJson.json')
         expect(writes.find(write => write.relativePath.endsWith('BuffJsonData/100.json'))?.content).toContain('"buffid": 100')
+
+        const configContent = writes.find(write => write.relativePath.endsWith('Config/modConfig.json'))?.content
+        expect(configContent).toBeTruthy()
+        const config = JSON.parse(configContent ?? '') as Record<string, unknown>
+        expect(config.Name).toBe('Demo')
+        expect(config.root).toBeUndefined()
+    })
+
+    it('skips empty groups so missing data files are not generated', () => {
+        const writes = serializeProjectFiles({
+            id: 'project',
+            name: 'Demo',
+            mods: [
+                {
+                    id: 'mod',
+                    name: 'demo',
+                    groups: [
+                        { key: 'config', label: 'config', records: [{ key: 'root', data: { Name: 'Demo' } }] },
+                        { key: 'buff', label: 'buff', records: [] },
+                        { key: 'wuDao', label: 'wuDao', records: [] },
+                        { key: 'item', label: 'item', records: [] },
+                    ],
+                },
+            ],
+        })
+
+        const paths = writes.map(write => write.relativePath)
+        expect(paths).toEqual(['plugins/Next/_/mod_demo/Config/modConfig.json'])
+        expect(paths).not.toContain('plugins/Next/_/mod_demo/Data/WuDaoJson.json')
+        expect(paths).not.toContain('plugins/Next/_/mod_demo/Data/ItemJsonData')
     })
 
     it('normalizes record types and fills complete fields when saving', () => {

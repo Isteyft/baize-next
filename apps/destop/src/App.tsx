@@ -42,6 +42,7 @@ import {
 import {
     collectGroupRecordsFromProjects,
     getFirstProjectSelection,
+    insertRecordSorted,
     removeProjectModRoots,
     type SelectionSource,
 } from './utils/projectSession'
@@ -545,7 +546,9 @@ export default function App() {
 
         const createRecordInProject = (item: ProjectData): ProjectData =>
             updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>
-                groupRecords.some(record => record.key === recordKey) ? groupRecords : [...groupRecords, nextRecord]
+                groupRecords.some(record => record.key === recordKey)
+                    ? groupRecords
+                    : insertRecordSorted(selection.groupKey, groupRecords, nextRecord)
             ) ?? item
 
         if (selection.kind === 'preload') {
@@ -613,7 +616,9 @@ export default function App() {
 
         const addRecordToProject = (item: ProjectData): ProjectData =>
             updateProjectGroupRecords(item, selection.modId, selection.groupKey, groupRecords =>
-                groupRecords.some(record => record.key === nextRecord.key) ? groupRecords : [...groupRecords, nextRecord]
+                groupRecords.some(record => record.key === nextRecord.key)
+                    ? groupRecords
+                    : insertRecordSorted(selection.groupKey, groupRecords, nextRecord)
             ) ?? item
 
         if (selection.kind === 'preload') {

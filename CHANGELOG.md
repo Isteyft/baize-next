@@ -2,6 +2,15 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   fix(destop): 新增数据时按主键数字序插入到正确位置，保持 records 数组有序，修复新增 ID 排序位置错误的问题。
+-   test(destop): 补充 insertRecordSorted 排序插入的 Vitest 用例，覆盖数字/字符串 id、key 兜底与非数值记录。
+
+-   fix(destop): 保存项目时跳过无数据分组，项目本身不存在的表（如悟道）不再凭空生成空 JSON 文件。
+-   test(destop): 补充空分组序列化用例，校验空悟道/物品分组不产出文件。
+
+-   fix(destop): 保存项目时 config 分组不再额外包裹 root 层，顶层直接输出 Name/Author/Version/Description/Settings 等字段。
+-   test(destop): 补充 config 分组序列化断言，校验 modConfig.json 顶层无 root 包裹。
+
 -   fix(destop): 右键生成技能书时将物品说明(desc)改为 skill_id 的字符串，物品描述(desc2)保留原始描述。
 -   test(destop): 更新技能书生成用例，校验 desc 为 skill_id、desc2保留源描述。
 -   fix(destop): JSON 表格右键菜单改用通用 ContextMenu 组件，动态计算边界并向上翻转，避免底部显示不全。
