@@ -171,7 +171,6 @@ export default function App() {
     }
 
     const preloadProject = preloadProjects.find(project => project.id === activePreloadProjectId) ?? preloadProjects[0] ?? null
-    const project = projects.find(item => item.id === activeProjectId) ?? projects[0] ?? null
     const selectedProject =
         selection?.kind === 'preload'
             ? (preloadProjects.find(item => item.id === selection.projectId) ?? null)
@@ -184,7 +183,7 @@ export default function App() {
     const records: JsonRecord[] = selectedGroup?.records ?? []
     const groupKey: ProjectModGroupKey | null = selection?.groupKey ?? null
     const selectedRecord = records.find(record => record.key === selectedRecordKey) ?? null
-    const referenceProjects = [...preloadProjects, ...(project ? [project] : [])]
+    const referenceProjects = [...preloadProjects, ...projects]
     const affixRecords = collectGroupRecordsFromProjects(referenceProjects, 'tuJianChunWenBen')
     const shenTongRecords = collectGroupRecordsFromProjects(referenceProjects, 'shenTong')
     const skillRecords = collectGroupRecordsFromProjects(referenceProjects, 'skill')
@@ -524,7 +523,8 @@ export default function App() {
         const closingProject = projects.find(item => item.id === projectId) ?? null
         if (!closingProject) return
         const remainingProjects = projects.filter(item => item.id !== projectId)
-        const nextActiveProject = activeProjectId === projectId ? (remainingProjects[0] ?? null) : (project ?? null)
+        const nextActiveProject =
+            activeProjectId === projectId ? (remainingProjects[0] ?? null) : (projects.find(item => item.id === activeProjectId) ?? null)
 
         setProjects(remainingProjects)
         setActiveProjectId(nextActiveProject?.id ?? null)

@@ -2,6 +2,7 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   fix(destop): AI search_record 查询范围扩大到全部预加载 + 全部已加载项目。根因：referenceProjects 用 `[...preloadProjects, ...(project ? [project] : [])]`，已加载项目只取当前激活的单个 `project`，导致加载多个项目时其它项目记录查不到。修复：改为 `[...preloadProjects, ...projects]` 纳入全部已加载项目，并移除不再使用的 `project` 变量、在 handleCloseProject 处重建激活项目回退逻辑。tsc/lint 通过，aiAgent 13 用例通过。
 -   feat(destop): AI 生成结果新增「引用」功能，保持跨轮上下文连续。① aiGeneration 新增 serializeGeneratedResult，把生成结果（分组/key/data/seidData）序列化为引用文本；② ChatPanel 新增 referencedId 状态与「引用/已引用」按钮，被引用消息卡片加 accent 高亮边框；③ handleSend 时若存在被引用消息，将其生成结果作为 system 消息注入，使后续追问能在上次生成基础上修改而非重新臆造。补充序列化 3 个用例，aiGeneration 16 用例通过，tsc/lint 通过。
 -   feat(destop): AI 指令新增专属自定义提示词位。① AiCommand 接口新增 `customPrompt?: string` 字段（留空待扩展）；② 六个内置指令（写 buff / 写功法 / 写神通 / 写物品 / 写悟道 / 写 NPC 类型）均补 `customPrompt: ''` 占位；③ buildCommandContext 开头注入非空 customPrompt 作为「## 自定义提示」段落，方便按指令独立扩展提示词。aiCommands 10 用例通过，tsc 通过。
 -   fix(destop): AI 对话体验三项修复。① 思考态改为「思考中…x 秒」实时计时：新增 thinkingStartedAt 状态在发送/重试时记录起点，streaming 期间每秒 tick 刷新秒数，结束后清零；② 「应用到 mod」按钮持久化：会话消息新增 generated 字段，persistCurrentSession 落盘时保留，normalizeChatSession 校验并恢复，重新进入会话后按钮不再消失；③ ask_user 弹窗允许留空确认：去掉确定按钮的必填禁用，留空提交时回传「用户未填写，请自行决定」给 AI，并增加留空提示文案。补充 generated 持久化 2 个用例，全仓 244 用例通过，tsc/lint 通过。
