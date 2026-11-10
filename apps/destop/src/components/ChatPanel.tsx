@@ -14,8 +14,12 @@ import {
     type DelegateRecordArgs,
     GLOBAL_SYSTEM_PROMPT,
     mergeAccumulator,
+    parseCreateRecordArgs,
     parseDelegateRecordArgs,
+    parseSearchRecordArgs,
     parseToolArguments,
+    parseWriteSeidArgs,
+    type ToolCall,
 } from '../aiTools'
 import {
     type ChatSession,
@@ -54,12 +58,35 @@ const REFERENCED_TEXT = '已引用'
 const AGENT_MAX_ROUNDS = 12
 const DELEGATE_MAX_DEPTH = 3
 
+/** 步骤类型对应的展示图标（用简洁符号，避免引入图标库）。 */
+const STEP_ICONS: Record<AgentStep['kind'], string> = {
+    search: '🔍',
+    create: '📝',
+    writeSeid: '⚙️',
+    delegate: '🔀',
+    ask: '❓',
+}
+
+/** AI 生成过程中的一个动作步骤，用于在界面上展示 AI 的内部过程。 */
+export interface AgentStep {
+    /** 步骤唯一标识。 */
+    id: string
+    /** 步骤类型，决定展示图标与文案。 */
+    kind: 'search' | 'create' | 'writeSeid' | 'delegate' | 'ask'
+    /** 步骤简述。 */
+    label: string
+    /** 步骤详情（可选，如查询到的记录数、子会话生成条数）。 */
+    detail?: string
+}
+
 interface DisplayMessage extends ChatMessage {
     id: string
     pending?: boolean
     error?: string
     /** 该消息若为指令生成结果，缓存解析出的可应用结果。 */
     generated?: GeneratedResult | null
+    /** AI 生成过程中的动作步骤列表（实时追加展示）。 */
+    steps?: AgentStep[]
 }
 
 function createMessageId(): string {
@@ -265,8 +292,51 @@ export function ChatPanel({
         resolver?.(null)
     }
 
+    /** 将一个工具调用转换为可展示的步骤；无法识别或无需展示时返回 null。 */
+    function describeToolStep(name: string, call: ToolCall, feedback: string): AgentStep | null {
+        const raw = parseToolArguments(call.function?.arguments ?? '{}')
+        switch (name) {
+            case 'search_record': {
+                const args = raw ? parseSearchRecordArgs(raw) : null
+                return {
+                    id: call.id,
+                    kind: 'search',
+                    label: args ? `查询「${args.group}」分组` : '查询已有记录',
+                    detail: args?.query ? `关键词：${args.query}` : undefined,
+                }
+            }
+            case 'create_record': {
+                const args = raw ? parseCreateRecordArgs(raw) : null
+                return {
+                    id: call.id,
+                    kind: 'create',
+                    label: args ? `生成「${args.group}」记录` : '生成记录',
+                    detail: args ? `主键 ${args.key}` : undefined,
+                }
+            }
+            case 'write_seid': {
+                const args = raw ? parseWriteSeidArgs(raw) : null
+                return {
+                    id: call.id,
+                    kind: 'writeSeid',
+                    label: '写入 Seid 参数',
+                    detail: args ? `${args.dataKey} seidId=${args.seidId} → ${args.targetKey}` : undefined,
+                }
+            }
+            case 'ask_user':
+                return { id: call.id, kind: 'ask', label: '向用户提问', detail: feedback }
+            default:
+                return null
+        }
+    }
+
     /** 委托子会话生成一条依赖记录（如功法配套的 buff），复用「写 X」指令的完整上下文。返回子会话累积器。 */
-    async function runDelegation(model: AiModelConfig, args: DelegateRecordArgs, depth: number): Promise<AgentAccumulator | null> {
+    async function runDelegation(
+        model: AiModelConfig,
+        args: DelegateRecordArgs,
+        depth: number,
+        onStep?: (step: AgentStep) => void
+    ): Promise<AgentAccumulator | null> {
         const groupKey = args.group as AiCommand['groupKey']
         const command = findCommandByGroupKey(AI_COMMANDS, groupKey)
         if (!command) return null
@@ -279,7 +349,7 @@ export function ChatPanel({
         ]
 
         // 子循环独立累积器，结果由调用方合并回主累积器。
-        return runAgentLoop(model, subMessages, undefined, undefined, depth)
+        return runAgentLoop(model, subMessages, undefined, undefined, depth, onStep)
     }
 
     /** 执行一轮 agent 循环：带工具能力地调用模型，处理工具调用直到模型结束或问用户。返回累积的生成结果。 */
@@ -288,7 +358,8 @@ export function ChatPanel({
         baseMessages: ChatMessage[],
         onFinal?: (content: string, generated: GeneratedResult | null) => void,
         initialAcc?: AgentAccumulator,
-        depth = 0
+        depth = 0,
+        onStep?: (step: AgentStep) => void
     ): Promise<AgentAccumulator> {
         const tools = buildToolDefinitions()
         const executor = createDefaultToolExecutor(existingRecords)
@@ -314,6 +385,14 @@ export function ChatPanel({
             const { next, askUser, feedbacks } = runToolCalls(acc, otherCalls, executor)
             acc = next
 
+            // 将普通工具调用转为步骤并上报，让界面实时展示 AI 的动作。
+            for (const call of otherCalls) {
+                const name = call.function?.name ?? ''
+                const feedback = feedbacks.find(item => item.callId === call.id)?.content ?? ''
+                const step = describeToolStep(name, call, feedback)
+                if (step) onStep?.(step)
+            }
+
             // 逐条处理 delegate_record：异步起子会话，把子会话结果合并回主累积器。
             const delegateFeedbacks = new Map<string, string>()
             for (const call of delegateCalls) {
@@ -331,7 +410,8 @@ export function ChatPanel({
                     delegateFeedbacks.set(call.id, `delegate_record 已达最大嵌套深度 ${DELEGATE_MAX_DEPTH}，请改用 create_record 直接生成`)
                     continue
                 }
-                const subAcc = await runDelegation(model, raw, depth + 1)
+                onStep?.({ id: call.id, kind: 'delegate', label: `委托「${raw.group}」子会话生成`, detail: raw.requirement })
+                const subAcc = await runDelegation(model, raw, depth + 1, onStep)
                 if (!subAcc) {
                     delegateFeedbacks.set(call.id, `delegate_record 失败：分组 ${raw.group} 没有对应的生成指令`)
                     continue
@@ -343,6 +423,7 @@ export function ChatPanel({
             // 若本轮请求向用户提问，弹窗并等待，把回答作为 tool 结果回传。
             let askAnswer: string | null = null
             if (askUser) {
+                onStep?.({ id: `ask-${Date.now()}`, kind: 'ask', label: '向用户提问', detail: askUser.question })
                 askAnswer = await waitForAskAnswer(askUser)
                 if (askAnswer === null) {
                     // 用户取消提问，终止循环。
@@ -433,11 +514,23 @@ export function ChatPanel({
         try {
             if (commandForSend) {
                 // 指令模式：走 agent 多轮循环，AI 可自主补依赖并主动问 id。
-                await runAgentLoop(currentModel, [...systemMessages, ...history, userMessage], (content, generated) => {
-                    accumulated = content
-                    finalGenerated = generated
-                    replaceMessage(assistantId, { content: content || '（无回复）', pending: false })
-                })
+                await runAgentLoop(
+                    currentModel,
+                    [...systemMessages, ...history, userMessage],
+                    (content, generated) => {
+                        accumulated = content
+                        finalGenerated = generated
+                        replaceMessage(assistantId, { content: content || '（无回复）', pending: false })
+                    },
+                    undefined,
+                    0,
+                    step => {
+                        // 实时追加动作步骤，让界面展示 AI 的内部过程。
+                        setMessages(previous =>
+                            previous.map(item => (item.id === assistantId ? { ...item, steps: [...(item.steps ?? []), step] } : item))
+                        )
+                    }
+                )
                 if (!accumulated) {
                     replaceMessage(assistantId, { content: '（无回复）', pending: false })
                 }
@@ -695,12 +788,31 @@ export function ChatPanel({
                                         }`}
                                     >
                                         {message.pending && !message.content ? (
-                                            <span className="text-ink-subtle">
-                                                思考中…
-                                                {thinkingStartedAt
-                                                    ? `${Math.max(1, Math.floor((Date.now() - thinkingStartedAt) / 1000))} 秒`
-                                                    : ''}
-                                            </span>
+                                            <div className="flex flex-col gap-1.5">
+                                                {message.steps && message.steps.length > 0 ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        {message.steps.map(step => (
+                                                            <div key={step.id} className="flex items-start gap-1.5 text-xs text-ink-subtle">
+                                                                <span className="mt-px shrink-0" aria-hidden="true">
+                                                                    {STEP_ICONS[step.kind]}
+                                                                </span>
+                                                                <span className="min-w-0">
+                                                                    <span className="text-ink-soft">{step.label}</span>
+                                                                    {step.detail ? (
+                                                                        <span className="text-ink-subtle"> · {step.detail}</span>
+                                                                    ) : null}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                                <span className="text-ink-subtle">
+                                                    思考中…
+                                                    {thinkingStartedAt
+                                                        ? `${Math.max(1, Math.floor((Date.now() - thinkingStartedAt) / 1000))} 秒`
+                                                        : ''}
+                                                </span>
+                                            </div>
                                         ) : (
                                             <>
                                                 {message.content ? (
