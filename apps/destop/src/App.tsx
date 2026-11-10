@@ -16,6 +16,7 @@ import { getCurrentWindow, LogicalSize, type Window } from '@tauri-apps/api/wind
 import { open } from '@tauri-apps/plugin-dialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { type ExistingRecordIndex } from './aiAgent'
 import { applyGeneratedResultToProject, type GeneratedResult } from './aiGeneration'
 import { ChatPanel } from './components/ChatPanel'
 import { DataTable } from './components/DataTable'
@@ -194,6 +195,15 @@ export default function App() {
         skill: collectGroupRecordsFromProjects(referenceProjects, 'shenTong'),
         staticSkill: collectGroupRecordsFromProjects(referenceProjects, 'skill'),
         item: collectGroupRecordsFromProjects(referenceProjects, 'item'),
+    }
+    /** 供 AI search_record 工具查询的已有记录索引（预加载数据 + 当前项目）。 */
+    const existingRecords: ExistingRecordIndex = {
+        buff: collectGroupRecordsFromProjects(referenceProjects, 'buff'),
+        item: collectGroupRecordsFromProjects(referenceProjects, 'item'),
+        skill: collectGroupRecordsFromProjects(referenceProjects, 'skill'),
+        shenTong: collectGroupRecordsFromProjects(referenceProjects, 'shenTong'),
+        wuDao: collectGroupRecordsFromProjects(referenceProjects, 'wuDao'),
+        npcType: collectGroupRecordsFromProjects(referenceProjects, 'npcType'),
     }
     /** 当前选中 mod 的名称与根目录，用于定位 mod 内的资源文件。 */
     const currentRootPath =
@@ -977,6 +987,7 @@ export default function App() {
                             onClose={() => void handleOpenChat()}
                             metaDatasets={metaDatasets}
                             seidRecords={seidDrawerRecords}
+                            existingRecords={existingRecords}
                             onApplyGenerated={handleApplyGenerated}
                         />
                     </>

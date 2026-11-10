@@ -1,3 +1,5 @@
+import type { JsonRecord, ProjectModGroupKey } from '@baize-next/types'
+
 import type { ChatMessage } from './ai'
 import type { GeneratedResult } from './aiGeneration'
 import {
@@ -9,8 +11,10 @@ import {
     hasAccumulatedContent,
     parseAskUserArgs,
     parseCreateRecordArgs,
+    parseSearchRecordArgs,
     parseToolArguments,
     parseWriteSeidArgs,
+    type SearchRecordArgs,
     type ToolCall,
 } from './aiTools'
 
@@ -32,12 +36,83 @@ export interface AgentRoundOutcome {
     askUser: AskUserArgs | null
 }
 
+/** 已有记录索引：分组 -> 该分组下的已有记录（来自预加载数据 + 当前项目）。 */
+export type ExistingRecordIndex = Partial<Record<ProjectModGroupKey, JsonRecord[]>>
+
+/** 各分组记录的主键字段与名称字段，用于生成查询摘要。 */
+const GROUP_ID_FIELDS: Partial<Record<ProjectModGroupKey, string>> = {
+    buff: 'buffid',
+    skill: 'Skill_ID',
+    shenTong: 'Skill_ID',
+    item: 'id',
+    wuDao: 'id',
+    npcType: 'id',
+}
+
+const GROUP_NAME_FIELDS: Partial<Record<ProjectModGroupKey, string>> = {
+    buff: 'name',
+    skill: 'name',
+    shenTong: 'name',
+    item: 'name',
+    wuDao: 'name',
+    npcType: 'Type',
+}
+
+/** 从记录中提取摘要（主键 + 名称）。 */
+function recordSummary(group: ProjectModGroupKey, record: JsonRecord): string {
+    const idField = GROUP_ID_FIELDS[group]
+    const nameField = GROUP_NAME_FIELDS[group]
+    const id = idField ? record.data[idField] : undefined
+    const name = nameField ? record.data[nameField] : undefined
+    const key = record.key
+    const idText = id !== undefined && id !== null ? String(id) : key
+    const nameText = typeof name === 'string' && name.trim() !== '' ? ` ${name}` : ''
+    return `${idText}${nameText}`
+}
+
+/**
+ * 在已有记录索引中查询记录，返回给模型的摘要文本。
+ * 纯函数：按 group 取记录，query 非空时按主键/名称/描述模糊过滤，最多返回 MAX_RESULTS 条。
+ */
+export function searchExistingRecords(index: ExistingRecordIndex, args: SearchRecordArgs): string {
+    const records = index[args.group] ?? []
+    if (records.length === 0) return `分组 ${args.group} 下暂无已有记录`
+
+    const query = args.query.toLowerCase()
+    const matched = query
+        ? records.filter(record => {
+              const haystack = [
+                  record.key,
+                  GROUP_ID_FIELDS[args.group] ? String(record.data[GROUP_ID_FIELDS[args.group]!] ?? '') : '',
+                  GROUP_NAME_FIELDS[args.group] ? String(record.data[GROUP_NAME_FIELDS[args.group]!] ?? '') : '',
+                  String(record.data.descr ?? ''),
+                  String(record.data.des ?? ''),
+                  String(record.data.TuJiandescr ?? ''),
+              ]
+                  .join(' ')
+                  .toLowerCase()
+              return haystack.includes(query)
+          })
+        : records
+
+    if (matched.length === 0) return `分组 ${args.group} 下未找到与「${args.query}」匹配的记录`
+
+    const shown = matched.slice(0, MAX_RESULTS)
+    const lines = shown.map(record => `- ${recordSummary(args.group, record)}`)
+    const more = matched.length > MAX_RESULTS ? `\n（共 ${matched.length} 条，仅展示前 ${MAX_RESULTS} 条，可缩小关键词精确查询）` : ''
+    return `分组 ${args.group} 下找到 ${matched.length} 条记录：\n${lines.join('\n')}${more}`
+}
+
+const MAX_RESULTS = 30
+
 /** 执行工具调用的回调：返回每类工具的处理结果文本（回传给模型）。 */
 export interface ToolExecutor {
     /** 执行 create_record，返回回传给模型的文本。 */
     createRecord: (acc: AgentAccumulator, raw: Record<string, unknown>) => { next: AgentAccumulator; feedback: string }
     /** 执行 write_seid。 */
     writeSeid: (acc: AgentAccumulator, raw: Record<string, unknown>) => { next: AgentAccumulator; feedback: string }
+    /** 执行 search_record（只读查询，不改变累积器），返回查询结果文本。 */
+    searchRecord: (raw: Record<string, unknown>) => string
 }
 
 /**
@@ -77,6 +152,11 @@ export function runToolCalls(
             feedbacks.push({ callId: call.id, content: result.feedback })
             continue
         }
+        if (call.name === 'search_record') {
+            const feedback = executor.searchRecord(raw)
+            feedbacks.push({ callId: call.id, content: feedback })
+            continue
+        }
         feedbacks.push({ callId: call.id, content: `未知工具：${call.name}` })
     }
 
@@ -84,10 +164,10 @@ export function runToolCalls(
 }
 
 /**
- * 默认工具执行器：把 create_record / write_seid 累积到 accumulator。
+ * 默认工具执行器：把 create_record / write_seid 累积到 accumulator，search_record 查询已有记录。
  * create_record 解析失败时反馈错误，成功则反馈成功。
  */
-export function createDefaultToolExecutor(): ToolExecutor {
+export function createDefaultToolExecutor(index: ExistingRecordIndex = {}): ToolExecutor {
     return {
         createRecord: (acc, raw) => {
             const record = parseCreateRecordArgs(raw)
@@ -98,6 +178,11 @@ export function createDefaultToolExecutor(): ToolExecutor {
             const args = parseWriteSeidArgs(raw)
             if (!args) return { next: acc, feedback: 'write_seid 参数非法：缺少 dataKey/seidId/targetKey/params' }
             return { next: accumulateSeid(acc, args), feedback: `已暂存 Seid ${args.dataKey}:${args.seidId} → ${args.targetKey}` }
+        },
+        searchRecord: raw => {
+            const args = parseSearchRecordArgs(raw)
+            if (!args) return 'search_record 参数非法：缺少 group'
+            return searchExistingRecords(index, args)
         },
     }
 }

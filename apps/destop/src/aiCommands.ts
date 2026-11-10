@@ -136,11 +136,13 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
         [
             '## 生成方式（使用工具）',
             '请通过工具调用完成生成，不要直接输出 JSON 文本：',
-            '1. 用 `create_record` 工具写入主记录（目标分组），`key` 使用主键字段值（buff→buffid，功法/神通→Skill_ID，物品→id）。',
-            '2. 若主记录引用了其它 buff/物品（如功法引用了 buff、buff 又引用了物品），请递归地用 `create_record` 补写这些被引用的依赖记录。',
-            '3. 对每条含 seid 的记录，用 `write_seid` 工具写入每个 Seid 的参数（dataKey 取值 buff/skill/staticSkill/itemUse/itemEquip，与 Seid 所属分组对应）。',
-            '4. 若缺少生成所需的必要信息（尤其是 id 用多少），请优先调用 `ask_user` 工具向用户询问，而不是随意编造 id。',
-            '5. 全部生成完成后，用一句简短的中文说明生成结果。',
+            '1. 生成前，若内容涉及引用已有 buff/功法/神通/物品（例如功法需要引用某个 buff、效果需要叠加某个已有 buff 等），先调用 `search_record` 工具查询对应分组，确认是否已有可复用的记录。',
+            '2. 查到已有记录时，直接引用其主键 id（如 buffid、Skill_ID），不要重复新建；查不到时才新建。',
+            '3. 用 `create_record` 工具写入主记录（目标分组），`key` 使用主键字段值（buff→buffid，功法/神通→Skill_ID，物品→id）。',
+            '4. 若主记录引用了其它 buff/物品（如功法引用了 buff、buff 又引用了物品），请递归地用 `create_record` 补写这些被引用的依赖记录。',
+            '5. 对每条含 seid 的记录，用 `write_seid` 工具写入每个 Seid 的参数（dataKey 取值 buff/skill/staticSkill/itemUse/itemEquip，与 Seid 所属分组对应）。',
+            '6. 若缺少生成所需的必要信息（尤其是 id 用多少），请优先调用 `ask_user` 工具向用户询问，而不是随意编造 id。',
+            '7. 全部生成完成后，用一句简短的中文说明生成结果。',
         ].join('\n')
     )
 

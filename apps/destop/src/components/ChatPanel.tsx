@@ -2,7 +2,7 @@ import type { JsonDataset } from '@baize-next/types'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { chatCompletionStream, chatCompletionWithTools, type ChatMessage } from '../ai'
-import { createDefaultToolExecutor, runToolCalls } from '../aiAgent'
+import { createDefaultToolExecutor, type ExistingRecordIndex, runToolCalls } from '../aiAgent'
 import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from '../aiCommands'
 import { type GeneratedResult, parseGeneratedResult } from '../aiGeneration'
 import { type AiModelConfig, getSavedAiModels } from '../aiModels'
@@ -68,12 +68,21 @@ interface ChatPanelProps {
     metaDatasets?: JsonDataset[]
     /** Seid 属性引用解析用的记录抽屉。 */
     seidRecords?: SeidDrawerRecords
+    /** 已有记录索引（预加载数据 + 当前项目），供 search_record 工具查询复用。 */
+    existingRecords?: ExistingRecordIndex
     /** 将 AI 生成结果应用到当前 mod；无选中 mod 时返回 false。 */
     onApplyGenerated?: (result: GeneratedResult) => boolean
 }
 
 /** 内嵌在主窗口右侧的 AI 对话面板。 */
-export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords, onApplyGenerated }: ChatPanelProps) {
+export function ChatPanel({
+    width = 360,
+    onClose,
+    metaDatasets = [],
+    seidRecords,
+    existingRecords = {},
+    onApplyGenerated,
+}: ChatPanelProps) {
     const [models] = useState<AiModelConfig[]>(getSavedAiModels)
     const [modelId, setModelId] = useState<string>('')
     const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -221,7 +230,7 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
         onFinal: (content: string, generated: GeneratedResult | null) => void
     ): Promise<void> {
         const tools = buildToolDefinitions()
-        const executor = createDefaultToolExecutor()
+        const executor = createDefaultToolExecutor(existingRecords)
         let acc = createAgentAccumulator()
         // 完整消息序列（含 tool 消息），随循环增长。
         let loopMessages: ChatMessage[] = [...baseMessages]

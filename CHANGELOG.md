@@ -2,6 +2,7 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   feat(destop): AI 生成新增 search_record 工具，支持查询已有数据并复用。① aiTools 新增 search_record 工具定义（按分组 + 关键词查询）与 parseSearchRecordArgs；② aiAgent 新增 searchExistingRecords 纯函数（按主键/名称/描述模糊过滤，返回 id+名称摘要）与 ExistingRecordIndex 类型，createDefaultToolExecutor 接收记录索引并接入 searchRecord 执行器；③ ChatPanel 新增 existingRecords prop，App.tsx 用 referenceProjects 汇总 buff/item/skill/shenTong/wuDao/npcType 分组记录传入；④ 指令上下文引导 AI「引用已有内容前先 search_record 查询，查到直接复用其 id，查不到才新建」，避免重复造轮子与 id 冲突。
 -   fix(destop): 侧边 AI 对话面板的消息内容支持选中复制。根因：App 根节点 `select-none` 全局禁用文本选择，仅 input/textarea/contenteditable 例外，导致消息气泡文本无法选中。修复：给用户/助手消息气泡容器加 `select-text` 类，恢复消息文本的选择与复制，其余界面仍保持 select-none。
 -   feat(destop): AI 生成改为工具（function calling）+ agent 多轮循环，支持自主补依赖与主动问 id。① Rust 后端 chat_completion 新增 tools 参数与 tool_calls 解析（含 tool 角色的 tool_call_id 回传）；② 新增 aiTools 模块：GLOBAL_SYSTEM_PROMPT 全局提示词常量（默认为空、可扩展）、工具定义（create_record / write_seid / ask_user）与参数解析、累积器；③ 新增 aiAgent 模块：runToolCalls 工具执行编排（纯函数）；④ ai.ts 新增 chatCompletionWithTools；⑤ ChatPanel 指令模式走 agent 循环（最多 12 轮），ask_user 工具触发弹窗表单收集答案后继续循环，生成结果累积后仍走「应用到 mod」预览确认；⑥ 指令上下文输出协议由「直接输出 JSON」改为「通过工具生成」。
 -   feat(destop): AI 生成结果支持应用到 mod。① 新增 aiGeneration 模块：extractJsonObject 容错提取 AI 回复中的 JSON，parseGeneratedResult 解析 records + seidData 多记录结构，applyGeneratedResultToProject 纯函数批量写回（规范化记录 + 插入/覆盖分组 + 写 Seid 参数并补 data.seid 数组）；② 指令输出协议升级为多记录结构，支持级联生成（功法→依赖 buff→buff 的 seid 递归）；③ ChatPanel 指令模式下解析回复，助手气泡显示「应用到 mod」按钮，点击弹预览确认，确认后经 onApplyGenerated 写回当前选中 mod（无 mod 时记错误日志）；④ App.tsx 新增 handleApplyGenerated。

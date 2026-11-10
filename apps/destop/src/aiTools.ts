@@ -40,6 +40,14 @@ export interface CreateRecordArgs {
     data: Record<string, JsonValue>
 }
 
+/** search_record 工具参数：在已有记录中查询可复用的内容。 */
+export interface SearchRecordArgs {
+    /** 查询的分组，取值 buff/item/skill/shenTong/wuDao/npcType。 */
+    group: ProjectModGroupKey
+    /** 查询关键词（按名称/主键模糊匹配）；为空则返回该分组全部记录摘要。 */
+    query: string
+}
+
 /** write_seid 工具参数：写入一条 Seid 参数。 */
 export interface WriteSeidArgs {
     /** Seid 数据目录：buff/skill/staticSkill/itemUse/itemEquip。 */
@@ -152,6 +160,13 @@ export function parseWriteSeidArgs(raw: Record<string, unknown>): WriteSeidArgs 
     return { dataKey, seidId, targetKey, params }
 }
 
+/** 解析 search_record 工具参数。 */
+export function parseSearchRecordArgs(raw: Record<string, unknown>): SearchRecordArgs | null {
+    if (!isSupportedGroup(raw.group)) return null
+    const query = typeof raw.query === 'string' ? raw.query.trim() : ''
+    return { group: raw.group, query }
+}
+
 /** 解析 ask_user 工具参数。 */
 export function parseAskUserArgs(raw: Record<string, unknown>): AskUserArgs | null {
     if (typeof raw.question !== 'string' || raw.question.trim() === '') return null
@@ -179,6 +194,25 @@ export function buildToolDefinitions() {
                         data: { type: 'object', description: '完整字段数据对象，包含主键字段与 seid 数组' },
                     },
                     required: ['group', 'key', 'data'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'search_record',
+                description:
+                    '在已有的游戏数据（预加载数据与当前 mod 中的记录）里查询可复用的内容。当需要引用一个 buff/功法/神通/物品时，先用它确认是否已存在，避免重复新建或 id 冲突。',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        group: { type: 'string', description: '查询的分组，取值 buff/item/skill/shenTong/wuDao/npcType' },
+                        query: {
+                            type: 'string',
+                            description: '查询关键词（按名称或主键 id 模糊匹配）；留空则返回该分组全部记录的 id+名称摘要',
+                        },
+                    },
+                    required: ['group'],
                 },
             },
         },

@@ -10,6 +10,7 @@ import {
     hasAccumulatedContent,
     parseAskUserArgs,
     parseCreateRecordArgs,
+    parseSearchRecordArgs,
     parseToolArguments,
     parseWriteSeidArgs,
 } from './aiTools'
@@ -68,6 +69,20 @@ describe('parseWriteSeidArgs', () => {
     })
 })
 
+describe('parseSearchRecordArgs', () => {
+    it('解析分组与关键词', () => {
+        expect(parseSearchRecordArgs({ group: 'buff', query: '剑气' })).toEqual({ group: 'buff', query: '剑气' })
+    })
+
+    it('缺 query 时默认为空字符串', () => {
+        expect(parseSearchRecordArgs({ group: 'buff' })).toEqual({ group: 'buff', query: '' })
+    })
+
+    it('非白名单 group 返回 null', () => {
+        expect(parseSearchRecordArgs({ group: 'unknown', query: 'x' })).toBeNull()
+    })
+})
+
 describe('parseAskUserArgs', () => {
     it('解析问题', () => {
         expect(parseAskUserArgs({ question: 'id 用多少？', kind: 'number' })).toEqual({
@@ -116,9 +131,9 @@ describe('accumulator 累积', () => {
 })
 
 describe('buildToolDefinitions', () => {
-    it('包含 create_record / write_seid / ask_user 三个工具', () => {
+    it('包含 create_record / search_record / write_seid / ask_user 四个工具', () => {
         const tools = buildToolDefinitions()
         const names = tools.map(tool => tool.function.name)
-        expect(names).toEqual(['create_record', 'write_seid', 'ask_user'])
+        expect(names).toEqual(['create_record', 'search_record', 'write_seid', 'ask_user'])
     })
 })
