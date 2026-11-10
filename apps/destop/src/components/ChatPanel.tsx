@@ -856,6 +856,28 @@ export function ChatPanel({
                                                 <span className="text-xs text-ink-subtle">{message.generated.records.length} 条记录</span>
                                             </div>
                                         ) : null}
+                                        {!message.pending && message.steps && message.steps.length > 0 ? (
+                                            <details className="mt-2 group">
+                                                <summary className="cursor-pointer select-none text-xs text-ink-subtle transition-colors hover:text-accent">
+                                                    查看生成过程（{message.steps.length} 步）
+                                                </summary>
+                                                <div className="mt-1.5 flex flex-col gap-1 border-l border-line pl-2">
+                                                    {message.steps.map(step => (
+                                                        <div key={step.id} className="flex items-start gap-1.5 text-xs text-ink-subtle">
+                                                            <span className="mt-px shrink-0" aria-hidden="true">
+                                                                {STEP_ICONS[step.kind]}
+                                                            </span>
+                                                            <span className="min-w-0">
+                                                                <span className="text-ink-soft">{step.label}</span>
+                                                                {step.detail ? (
+                                                                    <span className="text-ink-subtle"> · {step.detail}</span>
+                                                                ) : null}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </details>
+                                        ) : null}
                                     </div>
                                 </div>
                             )
