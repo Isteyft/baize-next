@@ -5,7 +5,7 @@ import { chatCompletionStream, chatCompletionWithTools, type ChatMessage } from 
 import { createDefaultToolExecutor, type ExistingRecordIndex, runToolCalls } from '../aiAgent'
 import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from '../aiCommands'
 import { type GeneratedResult, parseGeneratedResult } from '../aiGeneration'
-import { type AiModelConfig, getSavedAiModels } from '../aiModels'
+import { type AiModelConfig, getSavedAiModels, subscribeAiModels } from '../aiModels'
 import { type AskUserArgs, buildToolDefinitions, createAgentAccumulator, GLOBAL_SYSTEM_PROMPT } from '../aiTools'
 import {
     type ChatSession,
@@ -83,7 +83,7 @@ export function ChatPanel({
     existingRecords = {},
     onApplyGenerated,
 }: ChatPanelProps) {
-    const [models] = useState<AiModelConfig[]>(getSavedAiModels)
+    const [models, setModels] = useState<AiModelConfig[]>(getSavedAiModels)
     const [modelId, setModelId] = useState<string>('')
     const [sessions, setSessions] = useState<ChatSession[]>([])
     const [currentId, setCurrentId] = useState<string | null>(null)
@@ -131,12 +131,26 @@ export function ChatPanel({
         })
     }, [])
 
+    // 订阅大模型配置变更，设置窗口保存后侧边栏模型列表与选中项实时同步。
+    useEffect(() => {
+        return subscribeAiModels(next => {
+            setModels(next)
+        })
+    }, [])
+
     // 默认选中第一个模型。
     useEffect(() => {
         if (!modelId && models.length > 0) {
             setModelId(models[0].id)
         }
     }, [modelId, models])
+
+    // 当前选中的模型被删除后，回退到第一个可用模型，避免发送按钮一直禁用。
+    useEffect(() => {
+        if (models.length === 0) return
+        if (modelId && models.some(item => item.id === modelId)) return
+        setModelId(models[0].id)
+    }, [models, modelId])
 
     // 新消息时滚动到底部。
     useEffect(() => {

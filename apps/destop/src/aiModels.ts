@@ -1,3 +1,5 @@
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
+
 import { getSettingsStorageItem, setSettingsStorageItem } from './settingsStorage'
 
 /** 单个大模型 API 配置。 */
@@ -15,6 +17,7 @@ export interface AiModelConfig {
 }
 
 const STORAGE_KEY = 'baize-next.ai-models'
+const MODELS_EVENT = 'baize-next:ai-models-changed'
 
 /** 生成唯一模型 id。 */
 export function createAiModelId(): string {
@@ -84,4 +87,49 @@ export function saveAiModels(models: AiModelConfig[]): void {
     } catch {
         // Ignore storage failures.
     }
+    void broadcastAiModels(models)
+}
+
+/** 通过 Tauri 事件向所有窗口广播模型变更（非 Tauri 环境安全忽略）。 */
+async function broadcastAiModels(models: AiModelConfig[]): Promise<void> {
+    try {
+        await emit(MODELS_EVENT, models)
+    } catch {
+        // 浏览器预览等非 Tauri 环境忽略。
+    }
+}
+
+/** 订阅跨窗口大模型配置变更；返回取消函数。 */
+export function subscribeAiModels(onChange: (models: AiModelConfig[]) => void): () => void {
+    const cleanup: Array<() => void> = []
+
+    // 浏览器预览兜底：监听 localStorage 的 storage 事件。
+    const handleStorage = (event: StorageEvent): void => {
+        if (event.key !== STORAGE_KEY) return
+        try {
+            const parsed = JSON.parse(event.newValue ?? '[]') as unknown
+            const models = normalizeModels(parsed)
+            onChange(models ?? [])
+        } catch {
+            onChange([])
+        }
+    }
+    window.addEventListener('storage', handleStorage)
+    cleanup.push(() => window.removeEventListener('storage', handleStorage))
+
+    // Tauri 多窗口同步。
+    let unlisten: UnlistenFn | undefined
+    try {
+        void listen<unknown>(MODELS_EVENT, event => {
+            const models = normalizeModels(event.payload)
+            onChange(models ?? [])
+        }).then(fn => {
+            unlisten = fn
+        })
+    } catch {
+        // 非 Tauri 环境忽略。
+    }
+    cleanup.push(() => unlisten?.())
+
+    return () => cleanup.forEach(fn => fn())
 }
