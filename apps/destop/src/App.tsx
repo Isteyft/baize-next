@@ -12,13 +12,16 @@ import {
 } from '@baize-next/types'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { getCurrentWindow, LogicalSize, type Window } from '@tauri-apps/api/window'
 import { open } from '@tauri-apps/plugin-dialog'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { ChatPanel } from './components/ChatPanel'
 import { DataTable } from './components/DataTable'
 import { ErrorDetailModal } from './components/ErrorDetailModal'
 import { JsonEditor } from './components/JsonEditor'
 import { LeftPanel } from './components/LeftPanel'
+import { Resizer } from './components/Resizer'
 import { StartupLoading } from './components/StartupLoading'
 import { Tip, type TipTone } from './components/Tip'
 import { TitleBar } from './components/TitleBar'
@@ -52,6 +55,11 @@ import { appendSkillBookToMod, isSkillBookSourceGroup } from './utils/skillBook'
 const LOAD_FAILED_HINT = '\u9879\u76ee\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u6587\u4ef6'
 const SAVED_TEXT = '\u5df2\u4fdd\u5b58'
 const SAVE_FAILED_TEXT = '\u4fdd\u5b58\u5931\u8d25'
+
+/** 聊天侧边栏展开时窗口增加的宽度（逻辑像素）。 */
+const CHAT_PANEL_WIDTH = 360
+/** 关闭聊天侧边栏时窗口允许的最小宽度，避免缩得过窄。 */
+const CHAT_MIN_RESTORE_WIDTH = 900
 
 interface ConsultBookConfirmState {
     recordKey: string
@@ -148,6 +156,17 @@ export default function App() {
     const [tip, setTip] = useState<{ message: string; tone: TipTone } | null>(null)
     const [consultBookConfirm, setConsultBookConfirm] = useState<ConsultBookConfirmState | null>(null)
     const [consultBookWarning, setConsultBookWarning] = useState<string | null>(null)
+    const [chatOpen, setChatOpen] = useState(false)
+    const chatPrevWidthRef = useRef<number | null>(null)
+    const chatPanelWidthRef = useRef(CHAT_PANEL_WIDTH)
+    const [leftPanelWidth, setLeftPanelWidth] = useState(288)
+    const [jsonEditorWidth, setJsonEditorWidth] = useState(384)
+    const [chatPanelWidth, setChatPanelWidth] = useState(CHAT_PANEL_WIDTH)
+
+    function handleChatPanelWidth(next: number): void {
+        setChatPanelWidth(next)
+        chatPanelWidthRef.current = next
+    }
 
     const preloadProject = preloadProjects.find(project => project.id === activePreloadProjectId) ?? preloadProjects[0] ?? null
     const project = projects.find(item => item.id === activeProjectId) ?? projects[0] ?? null
@@ -809,23 +828,46 @@ export default function App() {
         }
     }
 
-    async function handleOpenChat(): Promise<void> {
+    /**
+     * 根据聊天面板显隐调整主窗口宽度：打开时加宽 CHAT_PANEL_WIDTH，关闭时缩回打开前的宽度。
+     * 全程使用逻辑像素（LogicalSize），通过 scaleFactor 把 outerSize 的物理像素换算为逻辑值，
+     * 避免 DPI 缩放（125%/150% 等）下的尺寸偏差。非 Tauri 环境（纯 Web 预览）安全忽略。
+     */
+    async function syncChatWindowWidth(open: boolean): Promise<void> {
+        let api: Window
         try {
-            const existing = await WebviewWindow.getByLabel('chat')
-            if (existing) return
-            new WebviewWindow('chat', {
-                url: 'index.html?window=chat',
-                title: 'AI \u5bf9\u8bdd',
-                width: 720,
-                height: 640,
-                minWidth: 480,
-                minHeight: 400,
-                center: true,
-                decorations: false,
-            })
+            api = getCurrentWindow()
         } catch {
-            // Non-Tauri preview ignores the new window.
+            return
         }
+        try {
+            // 最大化状态下 setSize 会被忽略，需先还原再调整。
+            if (await api.isMaximized()) {
+                await api.unmaximize()
+            }
+            const [size, scaleFactor] = await Promise.all([api.outerSize(), api.scaleFactor()])
+            const logicalWidth = size.toLogical(scaleFactor).width
+            const logicalHeight = size.toLogical(scaleFactor).height
+            const panelWidth = chatPanelWidthRef.current
+            if (open) {
+                if (chatPrevWidthRef.current === null) {
+                    chatPrevWidthRef.current = logicalWidth
+                }
+                await api.setSize(new LogicalSize(logicalWidth + panelWidth, logicalHeight))
+            } else {
+                const prev = chatPrevWidthRef.current ?? logicalWidth - panelWidth
+                chatPrevWidthRef.current = null
+                await api.setSize(new LogicalSize(Math.max(prev, CHAT_MIN_RESTORE_WIDTH), logicalHeight))
+            }
+        } catch {
+            // 忽略窗口尺寸调整失败。
+        }
+    }
+
+    async function handleOpenChat(): Promise<void> {
+        const next = !chatOpen
+        setChatOpen(next)
+        void syncChatWindowWidth(next)
     }
 
     if (bootPhase === 'loading' || bootPhase === 'error') {
@@ -858,6 +900,7 @@ export default function App() {
             />
             <main className="flex min-h-0 flex-1">
                 <LeftPanel
+                    width={leftPanelWidth}
                     preloadProjects={preloadProjects}
                     projects={projects}
                     selection={selection}
@@ -871,6 +914,7 @@ export default function App() {
                     onSelectPreloadGroup={(projectId, modId, groupKey) => handleSelectGroup('preload', projectId, modId, groupKey)}
                     onSelectGroup={(projectId, modId, groupKey) => handleSelectGroup('project', projectId, modId, groupKey)}
                 />
+                <Resizer onResize={delta => setLeftPanelWidth(previous => Math.max(160, previous + delta))} />
                 <DataTable
                     groupKey={groupKey}
                     records={records}
@@ -888,7 +932,9 @@ export default function App() {
                     modDirectory={selectedMod ? (selectedMod.directory ?? selectedMod.name) : null}
                     readAsset={readAsset}
                 />
+                <Resizer onResize={delta => setJsonEditorWidth(previous => Math.max(160, previous - delta))} />
                 <JsonEditor
+                    width={jsonEditorWidth}
                     groupKey={groupKey}
                     record={selectedRecord}
                     metaDatasets={metaDatasets}
@@ -904,6 +950,12 @@ export default function App() {
                     onUpdate={handleUpdateRecord}
                     onUpdateSeidData={handleUpdateSeidData}
                 />
+                {chatOpen ? (
+                    <>
+                        <Resizer onResize={delta => handleChatPanelWidth(Math.max(160, chatPanelWidthRef.current + delta))} />
+                        <ChatPanel width={chatPanelWidth} onClose={() => void handleOpenChat()} />
+                    </>
+                ) : null}
             </main>
             {bootError ? (
                 <div className="flex shrink-0 items-center border-t border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">

@@ -25,6 +25,8 @@ import { SeidEditor } from './SeidEditor'
 import { Select, type SelectOption } from './Select'
 
 interface JsonEditorProps {
+    /** 右侧编辑栏宽度（逻辑像素），缺省使用默认宽度 384。 */
+    width?: number
     /** 当前分组 key，用于字段 i18n 映射。 */
     groupKey: ProjectModGroupKey | null
     /** 当前选中记录，未选中时为 null。 */
@@ -828,6 +830,7 @@ function JsonFlagInput({
 }
 
 export function JsonEditor({
+    width = 384,
     groupKey,
     record,
     metaDatasets = [],
@@ -1086,7 +1089,7 @@ export function JsonEditor({
 
     return (
         <>
-            <section className="flex w-96 shrink-0 flex-col overflow-hidden border-l border-line bg-panel">
+            <section style={{ width }} className="flex shrink-0 flex-col overflow-hidden border-l border-line bg-panel">
                 <div className="shrink-0 border-b border-line px-3 py-2">
                     <h2 className="text-sm font-medium text-ink-muted">JSON 编辑</h2>
                 </div>

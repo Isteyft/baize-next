@@ -20,6 +20,10 @@ interface SelectProps<Value extends string> {
     'aria-label'?: string
     /** 宽度类等附加样式。 */
     className?: string
+    /** 弹窗展开方向，默认向下。 */
+    direction?: 'up' | 'down'
+    /** 紧凑尺寸：更小的内边距与字号。 */
+    compact?: boolean
 }
 
 /**
@@ -33,6 +37,8 @@ export function Select<Value extends string>({
     placeholder = '请选择',
     'aria-label': ariaLabel,
     className = '',
+    direction = 'down',
+    compact = false,
 }: SelectProps<Value>) {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
@@ -63,7 +69,9 @@ export function Select<Value extends string>({
                 type="button"
                 aria-label={ariaLabel}
                 onClick={() => setOpen(value => !value)}
-                className="flex w-full items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-hover focus:outline-none"
+                className={`flex w-full items-center justify-between gap-2 rounded-md border border-line bg-panel text-left text-ink transition-colors hover:bg-hover focus:outline-none ${
+                    compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'
+                }`}
             >
                 <span className={selected ? 'text-ink' : 'text-ink-subtle'}>{selected ? selected.label : placeholder}</span>
                 <span aria-hidden="true" className={`origin-center text-ink-muted transition-transform ${open ? 'rotate-180' : ''}`}>
@@ -71,7 +79,11 @@ export function Select<Value extends string>({
                 </span>
             </button>
             {open && (
-                <ul className="absolute left-0 z-50 mt-1 w-full overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-lg">
+                <ul
+                    className={`absolute left-0 z-50 w-full overflow-hidden rounded-md border border-line-strong bg-raised py-1 shadow-lg ${
+                        direction === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
+                    }`}
+                >
                     {options.map(option => {
                         const active = option.value === value
                         return (
@@ -82,7 +94,7 @@ export function Select<Value extends string>({
                                         onChange(option.value)
                                         setOpen(false)
                                     }}
-                                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
+                                    className={`flex w-full items-center gap-2 px-3 text-left transition-colors ${compact ? 'py-1 text-xs' : 'py-1.5 text-sm'} ${
                                         active ? 'bg-accent-soft text-ink' : 'text-ink-soft hover:bg-hover'
                                     }`}
                                 >

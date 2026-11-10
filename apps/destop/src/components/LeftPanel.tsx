@@ -10,6 +10,8 @@ import type { SelectionSource } from '../utils/projectSession'
  * - 项目右键菜单提供新建 Mod 与关闭项目；Mod 右键菜单提供重命名与删除。
  */
 interface LeftPanelProps {
+    /** 左侧栏宽度（逻辑像素），缺省使用默认宽度 288。 */
+    width?: number
     /** 已加载的 Mod 预加载项目。 */
     preloadProjects: ProjectData[]
     /** 当前同时打开的项目。 */
@@ -75,6 +77,7 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 export function LeftPanel({
+    width = 288,
     preloadProjects,
     projects,
     selection,
@@ -334,7 +337,7 @@ export function LeftPanel({
     }
 
     return (
-        <aside ref={asideRef} className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-line bg-panel">
+        <aside ref={asideRef} style={{ width }} className="flex shrink-0 flex-col overflow-hidden border-r border-line bg-panel">
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
                 <section className="mb-3">
                     <button

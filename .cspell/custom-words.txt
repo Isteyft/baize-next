@@ -26,6 +26,7 @@ Shua
 tauri
 totaltime
 unlisten
+unmaximize
 vite
 webkitdirectory
 webview
