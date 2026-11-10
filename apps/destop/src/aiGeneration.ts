@@ -25,6 +25,25 @@ export interface ApplicableRecord {
 }
 
 /**
+ * 将生成结果序列化为一段可供模型阅读的引用文本。
+ * 用于「引用回复」：用户基于上一条生成结果继续追问时，把结构化结果注入上下文，
+ * 让模型知道此前生成了哪些记录（分组、主键、字段与 Seid），从而在此基础上修改而非重新臆造。
+ */
+export function serializeGeneratedResult(result: GeneratedResult): string {
+    const lines: string[] = ['以下是此前通过指令生成的记录（引用上下文，供你在此基础上修改，勿重新臆造）：']
+    for (const record of result.records) {
+        lines.push(`- [${record.group}] key=${record.key}`)
+        const dataText = JSON.stringify(record.data)
+        lines.push(`  data: ${dataText}`)
+    }
+    const seidKeys = Object.keys(result.seidData)
+    if (seidKeys.length > 0) {
+        lines.push(`Seid 参数：${JSON.stringify(result.seidData)}`)
+    }
+    return lines.join('\n')
+}
+
+/**
  * 从 AI 回复文本中容错提取 JSON 对象。
  * 支持三种形态：纯 JSON、被 ```json ... ``` 或 ``` ... ``` 包裹的代码块、以及嵌在正文中的首个 { 到末个 } 区间。
  */

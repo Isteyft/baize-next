@@ -51,7 +51,7 @@ export const AI_COMMANDS: AiCommand[] = [
         description: '生成一条功法记录（含 seid）',
         groupKey: 'skill',
         seidMetaDatasets: ['StaticSkillSeidMeta'],
-        customPrompt: '生成功法时，需要生成一个或多个buff来完成这个功法。',
+        customPrompt: '功法就是让玩家战斗时，获得指定的buff，通过buff来完成功法的具体效果。',
     },
     {
         id: 'shenTong',

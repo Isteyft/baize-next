@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { chatCompletionStream, chatCompletionWithTools, type ChatMessage } from '../ai'
 import { createDefaultToolExecutor, type ExistingRecordIndex, runToolCalls } from '../aiAgent'
 import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from '../aiCommands'
-import { type GeneratedResult, parseGeneratedResult } from '../aiGeneration'
+import { type GeneratedResult, parseGeneratedResult, serializeGeneratedResult } from '../aiGeneration'
 import { type AiModelConfig, getSavedAiModels, subscribeAiModels } from '../aiModels'
 import { type AskUserArgs, buildToolDefinitions, createAgentAccumulator, GLOBAL_SYSTEM_PROMPT } from '../aiTools'
 import {
@@ -39,6 +39,8 @@ const APPLY_TEXT = '应用到 mod'
 const APPLY_PREVIEW_TITLE = '确认应用到 mod'
 const APPLY_CONFIRM_TEXT = '确认应用'
 const APPLY_CANCEL_TEXT = '取消'
+const REFERENCE_TEXT = '引用'
+const REFERENCED_TEXT = '已引用'
 const AGENT_MAX_ROUNDS = 12
 
 interface DisplayMessage extends ChatMessage {
@@ -95,6 +97,8 @@ export function ChatPanel({
     const [commandIndex, setCommandIndex] = useState(0)
     const [activeCommand, setActiveCommand] = useState<AiCommand | null>(null)
     const [applyTarget, setApplyTarget] = useState<GeneratedResult | null>(null)
+    /** 被「引用」的消息 id；后续发送时把该消息的生成结果注入上下文，保持上下文连续。 */
+    const [referencedId, setReferencedId] = useState<string | null>(null)
     const [askTarget, setAskTarget] = useState<AskUserArgs | null>(null)
     const [askAnswer, setAskAnswer] = useState('')
     const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null)
@@ -334,6 +338,12 @@ export function ChatPanel({
         const systemMessages = buildSystemMessages()
         setActiveCommand(null)
 
+        // 若存在被引用的生成结果，序列化后作为 system 上下文注入，保持跨轮上下文连续。
+        const referenced = referencedId ? messages.find(item => item.id === referencedId) : undefined
+        if (referenced?.generated) {
+            systemMessages.push({ role: 'system', content: serializeGeneratedResult(referenced.generated) })
+        }
+
         const history = messages.filter(item => item.role === 'user' || item.role === 'assistant')
         const abort = new AbortController()
         abortRef.current = abort
@@ -478,6 +488,11 @@ export function ChatPanel({
         setApplyTarget(result)
     }
 
+    /** 引用/取消引用一条生成结果消息：引用后后续对话会带上该结果作为上下文。 */
+    function handleToggleReference(messageId: string): void {
+        setReferencedId(previous => (previous === messageId ? null : messageId))
+    }
+
     /** 确认应用：调用父组件写回，成功后关闭弹窗；无 mod 时提示。 */
     function handleConfirmApply(): void {
         if (!applyTarget || !onApplyGenerated) return
@@ -611,7 +626,11 @@ export function ChatPanel({
                                 </div>
                             ) : (
                                 <div key={message.id} className="flex justify-start">
-                                    <div className="max-w-[80%] select-text rounded-lg bg-raised px-3 py-2 text-sm text-ink-soft">
+                                    <div
+                                        className={`max-w-[80%] select-text rounded-lg bg-raised px-3 py-2 text-sm text-ink-soft ${
+                                            referencedId === message.id ? 'ring-2 ring-accent' : ''
+                                        }`}
+                                    >
                                         {message.pending && !message.content ? (
                                             <span className="text-ink-subtle">
                                                 思考中…
@@ -647,6 +666,17 @@ export function ChatPanel({
                                                     className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover"
                                                 >
                                                     {APPLY_TEXT}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleReference(message.id)}
+                                                    className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                                                        referencedId === message.id
+                                                            ? 'border-accent bg-accent-soft text-accent'
+                                                            : 'border-line text-ink-soft hover:border-accent hover:text-accent'
+                                                    }`}
+                                                >
+                                                    {referencedId === message.id ? REFERENCED_TEXT : REFERENCE_TEXT}
                                                 </button>
                                                 <span className="text-xs text-ink-subtle">{message.generated.records.length} 条记录</span>
                                             </div>

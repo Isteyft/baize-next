@@ -1,7 +1,13 @@
 import type { ProjectData } from '@baize-next/types'
 import { describe, expect, it } from 'vitest'
 
-import { applyGeneratedResultToProject, extractJsonObject, normalizeGeneratedResult, parseGeneratedResult } from './aiGeneration'
+import {
+    applyGeneratedResultToProject,
+    extractJsonObject,
+    normalizeGeneratedResult,
+    parseGeneratedResult,
+    serializeGeneratedResult,
+} from './aiGeneration'
 
 describe('extractJsonObject', () => {
     it('parses plain JSON', () => {
@@ -144,5 +150,37 @@ describe('applyGeneratedResultToProject', () => {
             seidData: {},
         })
         expect(result).toEqual(project)
+    })
+})
+
+describe('serializeGeneratedResult', () => {
+    it('serializes records with group, key and data', () => {
+        const text = serializeGeneratedResult({
+            records: [
+                { group: 'skill', key: '123', data: { Skill_ID: 123, name: '火剑', seid: [7] } },
+                { group: 'buff', key: '456', data: { buffid: 456, name: '灼烧' } },
+            ],
+            seidData: {},
+        })
+        expect(text).toContain('[skill] key=123')
+        expect(text).toContain('[buff] key=456')
+        expect(text).toContain('"name":"火剑"')
+    })
+
+    it('includes seidData when present', () => {
+        const text = serializeGeneratedResult({
+            records: [{ group: 'skill', key: '123', data: { Skill_ID: 123, name: '火剑', seid: [7] } }],
+            seidData: { staticSkill: { '7': { '123': { skillid: 123 } } } },
+        })
+        expect(text).toContain('Seid 参数')
+        expect(text).toContain('"staticSkill"')
+    })
+
+    it('omits seid section when seidData is empty', () => {
+        const text = serializeGeneratedResult({
+            records: [{ group: 'npcType', key: '1', data: { id: 1, Type: '测试' } }],
+            seidData: {},
+        })
+        expect(text).not.toContain('Seid 参数')
     })
 })
