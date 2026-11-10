@@ -241,11 +241,43 @@ fn read_error_log(app: AppHandle) -> Result<String, String> {
 }
 
 /// 单条聊天消息（OpenAI 兼容）。
+/// 支持可选的 `content`（可为 null，用于带 tool_calls 的 assistant 消息）与 `tool_calls`。
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatMessageInput {
     role: String,
-    content: String,
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<ToolCallInput>>,
+    #[serde(default)]
+    tool_call_id: Option<String>,
+}
+
+/// 一条工具调用（assistant 发起的 function call）。
+#[derive(Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ToolCallInput {
+    id: String,
+    #[serde(rename = "type")]
+    call_type: String,
+    function: FunctionCallInput,
+}
+
+/// 工具调用的函数名与参数（JSON 字符串）。
+#[derive(Serialize, serde::Deserialize, Clone)]
+struct FunctionCallInput {
+    name: String,
+    arguments: String,
+}
+
+/// 传给模型可用的工具定义（OpenAI 兼容 function calling）。
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolInput {
+    #[serde(rename = "type")]
+    tool_type: String,
+    function: serde_json::Value,
 }
 
 /// 去掉 baseURL 末尾斜杠，避免拼出双斜杠。
@@ -263,15 +295,58 @@ fn build_chat_url(base_url: &str) -> String {
     }
 }
 
+/// 一次对话的返回结果：文本内容 + 可选的工具调用列表。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatCompletionResult {
+    content: String,
+    tool_calls: Vec<ToolCallInput>,
+}
+
+/// 将单个消息序列化为 OpenAI 兼容的消息体，支持 content 为 null 与 tool_calls。
+fn message_to_json(message: &ChatMessageInput) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    obj.insert("role".into(), serde_json::Value::String(message.role.clone()));
+    match &message.content {
+        Some(content) => {
+            obj.insert("content".into(), serde_json::Value::String(content.clone()));
+        }
+        None => {
+            obj.insert("content".into(), serde_json::Value::Null);
+        }
+    }
+    if let Some(tool_call_id) = &message.tool_call_id {
+        obj.insert("tool_call_id".into(), serde_json::Value::String(tool_call_id.clone()));
+    }
+    if let Some(tool_calls) = &message.tool_calls {
+        let calls = tool_calls
+            .iter()
+            .map(|call| {
+                serde_json::json!({
+                    "id": call.id,
+                    "type": call.call_type,
+                    "function": {
+                        "name": call.function.name,
+                        "arguments": call.function.arguments,
+                    },
+                })
+            })
+            .collect::<Vec<_>>();
+        obj.insert("tool_calls".into(), serde_json::Value::Array(calls));
+    }
+    serde_json::Value::Object(obj)
+}
+
 /// 通过 Rust 后端转发大模型请求，绕开浏览器 CORS 限制。
-/// 返回模型的完整回复文本。
+/// 支持 tools（function calling）；返回文本内容与工具调用列表。
 #[tauri::command]
 async fn chat_completion(
     base_url: String,
     api_key: String,
     model: String,
     messages: Vec<ChatMessageInput>,
-) -> Result<String, String> {
+    tools: Option<Vec<ToolInput>>,
+) -> Result<ChatCompletionResult, String> {
     let url = build_chat_url(&base_url);
 
     // 先校验 URL 是否合法，避免 reqwest 抛出笼统的 builder error。
@@ -281,11 +356,20 @@ async fn chat_completion(
         return Err(format!("Base URL 协议不支持：{}。仅支持 http/https", parsed.scheme()));
     }
 
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "model": model,
-        "messages": messages.into_iter().map(|m| serde_json::json!({ "role": m.role, "content": m.content })).collect::<Vec<_>>(),
+        "messages": messages.iter().map(message_to_json).collect::<Vec<_>>(),
         "stream": false,
     });
+    if let Some(tools) = tools {
+        let tool_defs = tools
+            .iter()
+            .map(|tool| serde_json::json!({ "type": tool.tool_type, "function": tool.function }))
+            .collect::<Vec<_>>();
+        if !tool_defs.is_empty() {
+            body["tools"] = serde_json::Value::Array(tool_defs);
+        }
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -304,11 +388,32 @@ async fn chat_completion(
     }
 
     let data: serde_json::Value = response.json().await.map_err(|error| error.to_string())?;
-    let content = data["choices"][0]["message"]["content"]
+    let message = &data["choices"][0]["message"];
+    let content = message["content"]
         .as_str()
         .unwrap_or_default()
         .to_string();
-    Ok(content)
+
+    // 解析工具调用列表。
+    let mut tool_calls: Vec<ToolCallInput> = Vec::new();
+    if let Some(calls) = message["tool_calls"].as_array() {
+        for call in calls {
+            let id = call["id"].as_str().unwrap_or_default().to_string();
+            let call_type = call["type"].as_str().unwrap_or("function").to_string();
+            let name = call["function"]["name"].as_str().unwrap_or_default().to_string();
+            let arguments = call["function"]["arguments"]
+                .as_str()
+                .unwrap_or("{}")
+                .to_string();
+            tool_calls.push(ToolCallInput {
+                id,
+                call_type,
+                function: FunctionCallInput { name, arguments },
+            });
+        }
+    }
+
+    Ok(ChatCompletionResult { content, tool_calls })
 }
 
 /// 默认会话目录：可执行文件所在目录下的 `.bz-chat`。

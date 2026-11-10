@@ -101,12 +101,13 @@ describe('buildCommandContext', () => {
         expect(context).not.toContain('可用 Seid 定义')
     })
 
-    it('requires multi-record output with seidData for cascading generation', () => {
+    it('guides tool-based generation with cascading dependencies', () => {
         const command = AI_COMMANDS.find(item => item.id === 'skill')!
         const context = buildCommandContext(command, [])
-        expect(context).toContain('输出格式要求')
-        expect(context).toContain('"records"')
-        expect(context).toContain('"seidData"')
+        expect(context).toContain('生成方式（使用工具）')
+        expect(context).toContain('create_record')
+        expect(context).toContain('write_seid')
         expect(context).toContain('递归')
+        expect(context).toContain('ask_user')
     })
 })

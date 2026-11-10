@@ -2,6 +2,8 @@
 
 项目变更日志。每次修改仓库文件时都必须在此添加记录。
 
+-   fix(destop): 侧边 AI 对话面板的消息内容支持选中复制。根因：App 根节点 `select-none` 全局禁用文本选择，仅 input/textarea/contenteditable 例外，导致消息气泡文本无法选中。修复：给用户/助手消息气泡容器加 `select-text` 类，恢复消息文本的选择与复制，其余界面仍保持 select-none。
+-   feat(destop): AI 生成改为工具（function calling）+ agent 多轮循环，支持自主补依赖与主动问 id。① Rust 后端 chat_completion 新增 tools 参数与 tool_calls 解析（含 tool 角色的 tool_call_id 回传）；② 新增 aiTools 模块：GLOBAL_SYSTEM_PROMPT 全局提示词常量（默认为空、可扩展）、工具定义（create_record / write_seid / ask_user）与参数解析、累积器；③ 新增 aiAgent 模块：runToolCalls 工具执行编排（纯函数）；④ ai.ts 新增 chatCompletionWithTools；⑤ ChatPanel 指令模式走 agent 循环（最多 12 轮），ask_user 工具触发弹窗表单收集答案后继续循环，生成结果累积后仍走「应用到 mod」预览确认；⑥ 指令上下文输出协议由「直接输出 JSON」改为「通过工具生成」。
 -   feat(destop): AI 生成结果支持应用到 mod。① 新增 aiGeneration 模块：extractJsonObject 容错提取 AI 回复中的 JSON，parseGeneratedResult 解析 records + seidData 多记录结构，applyGeneratedResultToProject 纯函数批量写回（规范化记录 + 插入/覆盖分组 + 写 Seid 参数并补 data.seid 数组）；② 指令输出协议升级为多记录结构，支持级联生成（功法→依赖 buff→buff 的 seid 递归）；③ ChatPanel 指令模式下解析回复，助手气泡显示「应用到 mod」按钮，点击弹预览确认，确认后经 onApplyGenerated 写回当前选中 mod（无 mod 时记错误日志）；④ App.tsx 新增 handleApplyGenerated。
 -   feat(destop): 指令选择新增可视化入口——输入框下方左侧显示「选择指令」按钮（未选时）或指令 chip 标签（选中时，可点击 × 移除），点击按钮同样弹出指令列表；指令不再写入输入框文本，而是作为独立的 activeCommand 状态以 chip 展示，发送时作为 system 上下文注入并在发送后清除。
 -   feat(destop): 聊天面板新增 slash 指令系统，输入 `/` 弹出指令选择（写 buff / 写功法 / 写神通 / 写物品 / 写悟道 / 写 NPC 类型），选中后自动将该分组的字段枚举与 SeidMeta 定义作为 system 上下文注入大模型请求，生成完整记录（含 seid 字段）。

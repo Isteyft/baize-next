@@ -1,11 +1,16 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import type { AiModelConfig } from './aiModels'
+import type { ToolCall } from './aiTools'
 
 /** 单条聊天消息。 */
 export interface ChatMessage {
-    role: 'system' | 'user' | 'assistant'
+    role: 'system' | 'user' | 'assistant' | 'tool'
     content: string
+    /** 工具调用（assistant 发起 function call 时携带），字段名与 Rust 后端 camelCase 对齐。 */
+    toolCalls?: ToolCall[]
+    /** tool 角色消息对应的工具调用 id。 */
+    toolCallId?: string
 }
 
 /** 流式输出回调。 */
@@ -14,8 +19,16 @@ export interface StreamCallbacks {
     onDone: (fullText: string) => void
 }
 
+/** 一次带工具能力的请求返回结果。 */
+export interface ChatCompletionWithToolsResult {
+    content: string
+    toolCalls: ToolCall[]
+}
+
 function normalizeMessages(messages: ChatMessage[]): ChatMessage[] {
-    return messages.filter(message => message.content.trim().length > 0).map(message => ({ role: message.role, content: message.content }))
+    return messages
+        .filter(message => message.role === 'tool' || message.content.trim().length > 0 || (message.toolCalls?.length ?? 0) > 0)
+        .map(message => ({ role: message.role, content: message.content }))
 }
 
 /**
@@ -29,6 +42,25 @@ export async function chatCompletion(model: AiModelConfig, messages: ChatMessage
         model: model.model,
         messages: normalizeMessages(messages),
     })
+}
+
+/**
+ * 带工具（function calling）能力地调用大模型。
+ * 返回文本内容与模型发起的工具调用列表。
+ */
+export async function chatCompletionWithTools(
+    model: AiModelConfig,
+    messages: ChatMessage[],
+    tools: unknown[]
+): Promise<ChatCompletionWithToolsResult> {
+    const result = await invoke<{ content: string; toolCalls: ToolCall[] }>('chat_completion', {
+        baseUrl: model.baseURL,
+        apiKey: model.apiKey,
+        model: model.model,
+        messages,
+        tools,
+    })
+    return { content: result.content, toolCalls: result.toolCalls ?? [] }
 }
 
 /**

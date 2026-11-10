@@ -111,7 +111,7 @@ function buildFieldEnumSection(groupKey: ProjectModGroupKey, datasets: JsonDatas
  */
 export function buildCommandContext(command: AiCommand, datasets: JsonDataset[], seidRecords?: SeidDrawerRecords): string {
     const records = seidRecords ?? { buff: [], skill: [], staticSkill: [], item: [] }
-    const sections: string[] = [`任务：${command.description}。请严格输出合法 JSON，不要输出多余的解释文字。`]
+    const sections: string[] = [`任务：${command.description}。请通过提供的工具（function calling）完成生成。`]
 
     sections.push(`## 目标分组：${command.groupKey}`)
 
@@ -126,7 +126,7 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
         if (definitions.length > 0) {
             sections.push('## 可用 Seid 定义')
             sections.push(
-                '记录通过 `seid` 字段引用 Seid（值为 Seid 数字 id 数组），Seid 参数写入对应 Seid 数据文件，参数对象以 Seid 的 idField 作为键。'
+                '记录通过 `seid` 字段引用 Seid（值为 Seid 数字 id 数组），Seid 参数通过 `write_seid` 工具写入，参数对象以 Seid 的 idField 作为键。'
             )
             sections.push(...definitions.map(definition => formatSeidDefinition(definition, datasets, records)))
         }
@@ -134,26 +134,13 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
 
     sections.push(
         [
-            '## 输出格式要求',
-            '请输出一个 JSON 对象，包含 `records` 数组与 `seidData` 对象：',
-            '```',
-            '{',
-            '  "records": [',
-            '    { "group": "skill", "key": "10001", "data": { "Skill_ID": 10001, "name": "火剑诀", "seid": [7] } },',
-            '    { "group": "buff", "key": "20001", "data": { "buffid": 20001, "name": "灼烧", "seid": [3] } }',
-            '  ],',
-            '  "seidData": {',
-            '    "staticSkill": { "7": { "10001": { "skillid": 10001, "value1": 10 } } },',
-            '    "buff": { "3": { "20001": { "buffid": 20001, "value1": 5 } } }',
-            '  }',
-            '}',
-            '```',
-            '规则：',
-            '1. `records` 第一项为主记录（目标分组），后续为它引用的依赖记录（如 buff、物品），group 取值仅限 buff/item/skill/shenTong/wuDao。',
-            '2. 若主记录或依赖记录引用了其它 buff/物品，请递归地把这些被引用记录一并加入 `records`，并为它们各自的 seid 补写 `seidData`，直到不再产生新依赖。',
-            '3. `key` 使用记录的主键字段值（buff→buffid，功法/神通→Skill_ID，物品→id）。',
-            '4. `seidData` 的目录名（buff/skill/staticSkill/itemUse/itemEquip）与 Seid 所属分组对应，参数对象以该 Seid 的 idField 作为键。',
-            '5. 除 JSON 外不要输出任何解释文字。',
+            '## 生成方式（使用工具）',
+            '请通过工具调用完成生成，不要直接输出 JSON 文本：',
+            '1. 用 `create_record` 工具写入主记录（目标分组），`key` 使用主键字段值（buff→buffid，功法/神通→Skill_ID，物品→id）。',
+            '2. 若主记录引用了其它 buff/物品（如功法引用了 buff、buff 又引用了物品），请递归地用 `create_record` 补写这些被引用的依赖记录。',
+            '3. 对每条含 seid 的记录，用 `write_seid` 工具写入每个 Seid 的参数（dataKey 取值 buff/skill/staticSkill/itemUse/itemEquip，与 Seid 所属分组对应）。',
+            '4. 若缺少生成所需的必要信息（尤其是 id 用多少），请优先调用 `ask_user` 工具向用户询问，而不是随意编造 id。',
+            '5. 全部生成完成后，用一句简短的中文说明生成结果。',
         ].join('\n')
     )
 

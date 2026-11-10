@@ -1,10 +1,12 @@
 import type { JsonDataset } from '@baize-next/types'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { chatCompletionStream, type ChatMessage } from '../ai'
+import { chatCompletionStream, chatCompletionWithTools, type ChatMessage } from '../ai'
+import { createDefaultToolExecutor, runToolCalls } from '../aiAgent'
 import { AI_COMMANDS, type AiCommand, buildCommandContext, filterAiCommands } from '../aiCommands'
 import { type GeneratedResult, parseGeneratedResult } from '../aiGeneration'
 import { type AiModelConfig, getSavedAiModels } from '../aiModels'
+import { type AskUserArgs, buildToolDefinitions, createAgentAccumulator, GLOBAL_SYSTEM_PROMPT } from '../aiTools'
 import {
     type ChatSession,
     type ChatSessionMessage,
@@ -37,6 +39,7 @@ const APPLY_TEXT = '应用到 mod'
 const APPLY_PREVIEW_TITLE = '确认应用到 mod'
 const APPLY_CONFIRM_TEXT = '确认应用'
 const APPLY_CANCEL_TEXT = '取消'
+const AGENT_MAX_ROUNDS = 12
 
 interface DisplayMessage extends ChatMessage {
     id: string
@@ -83,11 +86,14 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
     const [commandIndex, setCommandIndex] = useState(0)
     const [activeCommand, setActiveCommand] = useState<AiCommand | null>(null)
     const [applyTarget, setApplyTarget] = useState<GeneratedResult | null>(null)
+    const [askTarget, setAskTarget] = useState<AskUserArgs | null>(null)
+    const [askAnswer, setAskAnswer] = useState('')
     const listRef = useRef<HTMLDivElement>(null)
     const abortRef = useRef<AbortController | null>(null)
     const chatDirRef = useRef<string>('')
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const footerRef = useRef<HTMLElement>(null)
+    const askResolverRef = useRef<((answer: string | null) => void) | null>(null)
 
     const commandCandidates = useMemo(() => filterAiCommands(AI_COMMANDS, commandQuery), [commandQuery])
 
@@ -171,14 +177,101 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
         void writeChatSession(chatDirRef.current, updated)
     }
 
-    /** 组装发送给模型的 system 消息：基础提示 + 选中指令的 meta 上下文。 */
+    /** 组装发送给模型的 system 消息：全局提示词 + 基础提示 + 选中指令的 meta 上下文。 */
     function buildSystemMessages(): ChatMessage[] {
-        const messages: ChatMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }]
+        const messages: ChatMessage[] = []
+        if (GLOBAL_SYSTEM_PROMPT.trim()) messages.push({ role: 'system', content: GLOBAL_SYSTEM_PROMPT })
+        messages.push({ role: 'system', content: SYSTEM_PROMPT })
         if (activeCommand) {
             const context = buildCommandContext(activeCommand, metaDatasets, seidRecords)
             if (context) messages.push({ role: 'system', content: context })
         }
         return messages
+    }
+
+    /** 等待用户通过 ask_user 弹窗回答问题；返回回答文本，取消返回 null。 */
+    function waitForAskAnswer(args: AskUserArgs): Promise<string | null> {
+        return new Promise(resolve => {
+            askResolverRef.current = resolve
+            setAskAnswer('')
+            setAskTarget(args)
+        })
+    }
+
+    /** 弹窗提交回答：把答案回传给等待中的 agent 循环。 */
+    function handleAskSubmit(): void {
+        const resolver = askResolverRef.current
+        askResolverRef.current = null
+        setAskTarget(null)
+        resolver?.(askAnswer)
+    }
+
+    /** 弹窗取消：中断 agent 循环（回传 null 表示用户不回答）。 */
+    function handleAskCancel(): void {
+        const resolver = askResolverRef.current
+        askResolverRef.current = null
+        setAskTarget(null)
+        resolver?.(null)
+    }
+
+    /** 执行一轮 agent 循环：带工具能力地调用模型，处理工具调用直到模型结束或问用户。 */
+    async function runAgentLoop(
+        model: AiModelConfig,
+        baseMessages: ChatMessage[],
+        onFinal: (content: string, generated: GeneratedResult | null) => void
+    ): Promise<void> {
+        const tools = buildToolDefinitions()
+        const executor = createDefaultToolExecutor()
+        let acc = createAgentAccumulator()
+        // 完整消息序列（含 tool 消息），随循环增长。
+        let loopMessages: ChatMessage[] = [...baseMessages]
+        let finalText = ''
+
+        for (let round = 0; round < AGENT_MAX_ROUNDS; round++) {
+            const result = await chatCompletionWithTools(model, loopMessages, tools)
+            finalText = result.content
+
+            if (result.toolCalls.length === 0) {
+                // 无工具调用，循环结束。
+                break
+            }
+
+            // 处理工具调用。
+            const { next, askUser, feedbacks } = runToolCalls(acc, result.toolCalls, executor)
+            acc = next
+
+            // 若本轮请求向用户提问，弹窗并等待，把回答作为 tool 结果回传。
+            let askAnswer: string | null = null
+            if (askUser) {
+                askAnswer = await waitForAskAnswer(askUser)
+                if (askAnswer === null) {
+                    // 用户取消提问，终止循环。
+                    break
+                }
+            }
+
+            // 组装 assistant 消息（带 tool_calls）回传。
+            const assistantMessage: ChatMessage = {
+                role: 'assistant',
+                content: result.content,
+                toolCalls: result.toolCalls,
+            }
+            const toolMessages: ChatMessage[] = result.toolCalls.map(call => {
+                let content: string
+                const feedback = feedbacks.find(item => item.callId === call.id)
+                if (call.name === 'ask_user') {
+                    content = askAnswer ?? '用户未回答'
+                } else {
+                    content = feedback?.content ?? ''
+                }
+                return { role: 'tool', content, toolCallId: call.id }
+            })
+
+            loopMessages = [...loopMessages, assistantMessage, ...toolMessages]
+        }
+
+        const generated = acc.records.length > 0 ? ({ records: acc.records, seidData: acc.seidData } as GeneratedResult) : null
+        onFinal(finalText, generated)
     }
 
     async function handleSend(): Promise<void> {
@@ -209,18 +302,49 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
         abortRef.current = abort
 
         let accumulated = ''
-        try {
-            await chatCompletionStream(currentModel, [...systemMessages, ...history, userMessage], {
-                onDelta: delta => {
-                    accumulated += delta
-                    replaceMessage(assistantId, { content: accumulated, pending: false })
-                },
-                onDone: full => {
-                    replaceMessage(assistantId, { content: full, pending: false })
-                },
+        let finalGenerated: GeneratedResult | null = null
+
+        const finish = (): void => {
+            // 流式/循环结束后，用最终内容落盘一次，并尝试解析指令生成结果。
+            setMessages(previous => {
+                const finalMessages = previous.map(item => {
+                    if (item.id !== assistantId || item.error) return item
+                    const content = accumulated || '（无回复）'
+                    const generated = commandForSend
+                        ? (finalGenerated ?? parseGeneratedResult(content, commandForSend.groupKey ?? undefined))
+                        : null
+                    return { ...item, content, pending: false, generated }
+                })
+                persistCurrentSession(finalMessages)
+                return finalMessages
             })
-            if (!accumulated) {
-                replaceMessage(assistantId, { content: '（无回复）', pending: false })
+        }
+
+        try {
+            if (commandForSend) {
+                // 指令模式：走 agent 多轮循环，AI 可自主补依赖并主动问 id。
+                await runAgentLoop(currentModel, [...systemMessages, ...history, userMessage], (content, generated) => {
+                    accumulated = content
+                    finalGenerated = generated
+                    replaceMessage(assistantId, { content: content || '（无回复）', pending: false })
+                })
+                if (!accumulated) {
+                    replaceMessage(assistantId, { content: '（无回复）', pending: false })
+                }
+            } else {
+                // 普通对话：保持原有流式。
+                await chatCompletionStream(currentModel, [...systemMessages, ...history, userMessage], {
+                    onDelta: delta => {
+                        accumulated += delta
+                        replaceMessage(assistantId, { content: accumulated, pending: false })
+                    },
+                    onDone: full => {
+                        replaceMessage(assistantId, { content: full, pending: false })
+                    },
+                })
+                if (!accumulated) {
+                    replaceMessage(assistantId, { content: '（无回复）', pending: false })
+                }
             }
         } catch (error) {
             replaceMessage(assistantId, {
@@ -231,19 +355,8 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
         } finally {
             setStreaming(false)
             abortRef.current = null
+            finish()
         }
-
-        // 流式结束后，用最终内容落盘一次，并尝试解析指令生成结果。
-        setMessages(previous => {
-            const finalMessages = previous.map(item => {
-                if (item.id !== assistantId || item.error) return item
-                const content = accumulated || '（无回复）'
-                const generated = commandForSend ? parseGeneratedResult(content, commandForSend.groupKey ?? undefined) : null
-                return { ...item, content, pending: false, generated }
-            })
-            persistCurrentSession(finalMessages)
-            return finalMessages
-        })
     }
 
     /** 选中一条指令：记录为 activeCommand 并关闭弹窗，指令以 chip 展示、不写入输入框文本。 */
@@ -452,13 +565,13 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
                         {messages.map(message =>
                             message.role === 'user' ? (
                                 <div key={message.id} className="flex justify-end">
-                                    <div className="max-w-[80%] rounded-lg bg-accent px-3 py-2 text-sm text-accent-ink">
+                                    <div className="max-w-[80%] select-text rounded-lg bg-accent px-3 py-2 text-sm text-accent-ink">
                                         {message.content}
                                     </div>
                                 </div>
                             ) : (
                                 <div key={message.id} className="flex justify-start">
-                                    <div className="max-w-[80%] rounded-lg bg-raised px-3 py-2 text-sm text-ink-soft">
+                                    <div className="max-w-[80%] select-text rounded-lg bg-raised px-3 py-2 text-sm text-ink-soft">
                                         {message.pending && !message.content ? (
                                             <span className="text-ink-subtle">思考中…</span>
                                         ) : (
@@ -652,6 +765,74 @@ export function ChatPanel({ width = 360, onClose, metaDatasets = [], seidRecords
                                 type="button"
                                 onClick={handleConfirmApply}
                                 className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover"
+                            >
+                                {APPLY_CONFIRM_TEXT}
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            ) : null}
+
+            {askTarget ? (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-6" role="presentation">
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="AI 提问"
+                        className="flex w-[min(480px,calc(100vw-48px))] flex-col overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+                    >
+                        <header className="flex shrink-0 items-center justify-between border-b border-line px-4 py-3">
+                            <h3 className="text-base font-semibold text-ink">AI 需要补充信息</h3>
+                        </header>
+                        <div className="flex flex-col gap-2 p-4">
+                            <p className="text-sm text-ink">{askTarget.question}</p>
+                            {askTarget.kind === 'options' && askTarget.options ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {askTarget.options.map(option => (
+                                        <button
+                                            key={option}
+                                            type="button"
+                                            onClick={() => setAskAnswer(option)}
+                                            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                                                askAnswer === option
+                                                    ? 'border-accent bg-accent-soft text-accent'
+                                                    : 'border-line text-ink-soft hover:border-accent hover:text-accent'
+                                            }`}
+                                        >
+                                            {option}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <input
+                                    type={askTarget.kind === 'number' ? 'number' : 'text'}
+                                    value={askAnswer}
+                                    onChange={event => setAskAnswer(event.target.value)}
+                                    onKeyDown={event => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault()
+                                            handleAskSubmit()
+                                        }
+                                    }}
+                                    autoFocus
+                                    placeholder="请输入"
+                                    className="w-full rounded-md border border-line bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none"
+                                />
+                            )}
+                        </div>
+                        <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-3">
+                            <button
+                                type="button"
+                                onClick={handleAskCancel}
+                                className="rounded-md border border-line px-3 py-1.5 text-sm text-ink-soft hover:bg-hover"
+                            >
+                                {APPLY_CANCEL_TEXT}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleAskSubmit}
+                                disabled={!askAnswer.trim()}
+                                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {APPLY_CONFIRM_TEXT}
                             </button>
