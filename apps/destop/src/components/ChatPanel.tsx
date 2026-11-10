@@ -268,7 +268,7 @@ export function ChatPanel({
             const toolMessages: ChatMessage[] = result.toolCalls.map(call => {
                 let content: string
                 const feedback = feedbacks.find(item => item.callId === call.id)
-                if (call.name === 'ask_user') {
+                if (call.function?.name === 'ask_user') {
                     content = askAnswer ?? '用户未回答'
                 } else {
                     content = feedback?.content ?? ''

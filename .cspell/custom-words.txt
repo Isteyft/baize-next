@@ -42,3 +42,4 @@ skillid
 panduan
 xiaoguo
 sess
+Kimi

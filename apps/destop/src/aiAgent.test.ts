@@ -43,11 +43,16 @@ describe('searchExistingRecords', () => {
 describe('runToolCalls', () => {
     const executor = createDefaultToolExecutor()
 
+    /** 构造一条对齐后端（OpenAI 原生嵌套）结构的工具调用。 */
+    function toolCall(id: string, name: string, argumentsText: string) {
+        return { id, type: 'function', function: { name, arguments: argumentsText } }
+    }
+
     it('执行 create_record 累积记录', () => {
         const acc = createAgentAccumulator()
         const { next, askUser } = runToolCalls(
             acc,
-            [{ id: 'c1', name: 'create_record', arguments: JSON.stringify({ group: 'buff', key: '100', data: { buffid: 100 } }) }],
+            [toolCall('c1', 'create_record', JSON.stringify({ group: 'buff', key: '100', data: { buffid: 100 } }))],
             executor
         )
         expect(next.records).toHaveLength(1)
@@ -59,13 +64,7 @@ describe('runToolCalls', () => {
         const acc = createAgentAccumulator()
         const { next } = runToolCalls(
             acc,
-            [
-                {
-                    id: 'c1',
-                    name: 'write_seid',
-                    arguments: JSON.stringify({ dataKey: 'buff', seidId: '3', targetKey: '100', params: { value1: 5 } }),
-                },
-            ],
+            [toolCall('c1', 'write_seid', JSON.stringify({ dataKey: 'buff', seidId: '3', targetKey: '100', params: { value1: 5 } }))],
             executor
         )
         expect(next.seidData.buff?.['3']?.['100']).toEqual({ value1: 5 })
@@ -75,7 +74,7 @@ describe('runToolCalls', () => {
         const acc = createAgentAccumulator()
         const { askUser } = runToolCalls(
             acc,
-            [{ id: 'c1', name: 'ask_user', arguments: JSON.stringify({ question: 'id 用多少？', kind: 'number' }) }],
+            [toolCall('c1', 'ask_user', JSON.stringify({ question: 'id 用多少？', kind: 'number' }))],
             executor
         )
         expect(askUser).toEqual({ question: 'id 用多少？', kind: 'number', options: undefined })
@@ -83,14 +82,14 @@ describe('runToolCalls', () => {
 
     it('非法工具参数返回反馈但累积器不变', () => {
         const acc = createAgentAccumulator()
-        const { next, feedbacks } = runToolCalls(acc, [{ id: 'c1', name: 'create_record', arguments: 'not-json' }], executor)
+        const { next, feedbacks } = runToolCalls(acc, [toolCall('c1', 'create_record', 'not-json')], executor)
         expect(next.records).toHaveLength(0)
         expect(feedbacks[0].content).toContain('不是合法 JSON')
     })
 
     it('未知工具返回未知工具反馈', () => {
         const acc = createAgentAccumulator()
-        const { feedbacks } = runToolCalls(acc, [{ id: 'c1', name: 'unknown_tool', arguments: '{}' }], executor)
+        const { feedbacks } = runToolCalls(acc, [toolCall('c1', 'unknown_tool', '{}')], executor)
         expect(feedbacks[0].content).toContain('未知工具')
     })
 
@@ -101,7 +100,7 @@ describe('runToolCalls', () => {
         })
         const { next, feedbacks } = runToolCalls(
             acc,
-            [{ id: 'c1', name: 'search_record', arguments: JSON.stringify({ group: 'buff', query: '剑气' }) }],
+            [toolCall('c1', 'search_record', JSON.stringify({ group: 'buff', query: '剑气' }))],
             indexedExecutor
         )
         expect(next.records).toHaveLength(0)
@@ -110,7 +109,7 @@ describe('runToolCalls', () => {
 
     it('search_record 缺少 group 返回非法反馈', () => {
         const acc = createAgentAccumulator()
-        const { feedbacks } = runToolCalls(acc, [{ id: 'c1', name: 'search_record', arguments: '{}' }], executor)
+        const { feedbacks } = runToolCalls(acc, [toolCall('c1', 'search_record', '{}')], executor)
         expect(feedbacks[0].content).toContain('参数非法')
     })
 
@@ -119,12 +118,8 @@ describe('runToolCalls', () => {
         const { next } = runToolCalls(
             acc,
             [
-                { id: 'c1', name: 'create_record', arguments: JSON.stringify({ group: 'buff', key: '100', data: { buffid: 100 } }) },
-                {
-                    id: 'c2',
-                    name: 'write_seid',
-                    arguments: JSON.stringify({ dataKey: 'buff', seidId: '3', targetKey: '100', params: { value1: 5 } }),
-                },
+                toolCall('c1', 'create_record', JSON.stringify({ group: 'buff', key: '100', data: { buffid: 100 } })),
+                toolCall('c2', 'write_seid', JSON.stringify({ dataKey: 'buff', seidId: '3', targetKey: '100', params: { value1: 5 } })),
             ],
             executor
         )

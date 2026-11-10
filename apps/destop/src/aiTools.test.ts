@@ -33,6 +33,22 @@ describe('parseToolArguments', () => {
     it('非对象（数组）返回 null', () => {
         expect(parseToolArguments('[1,2,3]')).toBeNull()
     })
+
+    it('空字符串兜底为空对象', () => {
+        expect(parseToolArguments('')).toEqual({})
+    })
+
+    it('字面量 null 兜底为空对象', () => {
+        expect(parseToolArguments('null')).toEqual({})
+    })
+
+    it('剥离 Markdown 代码块包裹后解析', () => {
+        expect(parseToolArguments('```json\n{"a":1}\n```')).toEqual({ a: 1 })
+    })
+
+    it('容忍 JSON 前后的多余文本', () => {
+        expect(parseToolArguments('这里是思考：{"a":1} 结束')).toEqual({ a: 1 })
+    })
 })
 
 describe('parseCreateRecordArgs', () => {

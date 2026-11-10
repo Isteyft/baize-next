@@ -9,11 +9,14 @@ import type { GeneratedRecord, GeneratedResult } from './aiGeneration'
  */
 export const GLOBAL_SYSTEM_PROMPT = ''
 
-/** 工具调用：模型发起的一次 function call。 */
+/** 工具调用：模型发起的一次 function call。结构对齐 Rust 后端（OpenAI 原生嵌套形态）。 */
 export interface ToolCall {
     id: string
-    name: string
-    arguments: string
+    type: string
+    function: {
+        name: string
+        arguments: string
+    }
 }
 
 /** 工具执行结果，回传给模型（role: tool 消息）。 */
@@ -119,13 +122,40 @@ export function isSupportedGroup(value: unknown): value is ProjectModGroupKey {
     )
 }
 
-/** 解析工具调用的 arguments（JSON 字符串）为对象；失败返回 null。 */
+/**
+ * 解析工具调用的 arguments（JSON 字符串）为对象；失败返回 null。
+ *
+ * 部分模型（如 Kimi K2 Thinking 等思考型模型）返回的 arguments 可能不规范：
+ * - 空字符串 / 空白 / 字面量 "null"
+ * - 被 Markdown 代码块（```json ... ```）包裹
+ * - 混入思考过程文本，JSON 前后带多余说明
+ * 这里做多级容错：先尝试整段解析，再剥离 Markdown 代码块，最后按首尾花括号截取 JSON 子串。
+ * 全部失败时兜底为 null，由调用方反馈“工具参数不是合法 JSON”。
+ */
 export function parseToolArguments(argumentsText: string): Record<string, unknown> | null {
-    try {
-        const parsed = JSON.parse(argumentsText) as unknown
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>
-    } catch {
-        // ignore
+    const trimmed = argumentsText.trim()
+    // 空串 / 字面量 null → 视为空参数对象，避免模型因“无需参数”而传空导致的误报。
+    if (trimmed === '' || trimmed === 'null') return {}
+    const attempts: string[] = [trimmed]
+
+    // 剥离 Markdown 代码块包裹：```json ... ``` 或 ``` ... ```
+    const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+    if (fenceMatch) attempts.push(fenceMatch[1].trim())
+
+    // 按首尾花括号截取 JSON 子串（容忍前后多余文本）。
+    const braceStart = trimmed.indexOf('{')
+    const braceEnd = trimmed.lastIndexOf('}')
+    if (braceStart >= 0 && braceEnd > braceStart) {
+        attempts.push(trimmed.slice(braceStart, braceEnd + 1))
+    }
+
+    for (const candidate of attempts) {
+        try {
+            const parsed = JSON.parse(candidate) as unknown
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+        } catch {
+            // 尝试下一种形态
+        }
     }
     return null
 }
@@ -185,13 +215,20 @@ export function buildToolDefinitions() {
             type: 'function',
             function: {
                 name: 'create_record',
-                description: '写入一条游戏数据记录（buff/功法/神通/物品等）。调用后记录会被暂存，最终由用户确认后统一应用到 mod。',
+                description:
+                    '写入一条游戏数据记录（buff/功法/神通/物品等）。data 字段名必须严格使用系统提示词中给出的字段 schema，不要臆造或改名。调用后记录会被暂存，最终由用户确认后统一应用到 mod。',
                 parameters: {
                     type: 'object',
                     properties: {
                         group: { type: 'string', description: '记录分组，取值 buff/item/skill/shenTong/wuDao/npcType' },
-                        key: { type: 'string', description: '记录主键（buff→buffid，功法/神通→Skill_ID，物品→id）' },
-                        data: { type: 'object', description: '完整字段数据对象，包含主键字段与 seid 数组' },
+                        key: {
+                            type: 'string',
+                            description: '记录主键值（buff→buffid，功法/神通/物品/悟道→id），与 data 中的主键字段值一致',
+                        },
+                        data: {
+                            type: 'object',
+                            description: '完整字段数据对象，字段名严格按 schema，包含主键字段、name 名称字段与 seid 数组',
+                        },
                     },
                     required: ['group', 'key', 'data'],
                 },
@@ -220,14 +257,19 @@ export function buildToolDefinitions() {
             type: 'function',
             function: {
                 name: 'write_seid',
-                description: '为某条记录写入一个 Seid 参数。记录通过 data.seid 数组引用 Seid，参数写入对应 Seid 数据文件。',
+                description:
+                    '为某条记录写入一个 Seid 参数。seidId 必须是「可用 Seid 定义」中列出的 Seid 数字 id（如 1、3、40），不要用反斜杠、序号或占位符。参数写入对应 Seid 数据文件，同时该 Seid id 应出现在目标记录 data.seid 数组中。',
                 parameters: {
                     type: 'object',
                     properties: {
-                        dataKey: { type: 'string', description: 'Seid 数据目录，取值 buff/skill/staticSkill/itemUse/itemEquip' },
-                        seidId: { type: 'string', description: 'Seid 数字 id' },
-                        targetKey: { type: 'string', description: '拥有该 seid 的记录 key' },
-                        params: { type: 'object', description: 'Seid 参数对象' },
+                        dataKey: {
+                            type: 'string',
+                            description:
+                                'Seid 数据目录：buff 分组→buff，神通→skill，功法/悟道→staticSkill，物品→itemUse/itemEquip（按物品 type 决定）',
+                        },
+                        seidId: { type: 'string', description: 'Seid 数字 id，来自「可用 Seid 定义」里 Seid id= 后面的数字' },
+                        targetKey: { type: 'string', description: '拥有该 seid 的记录主键值（与 create_record 的 key 一致）' },
+                        params: { type: 'object', description: 'Seid 参数对象，以 Seid 定义中的参数对象键（idField）为键' },
                     },
                     required: ['dataKey', 'seidId', 'targetKey', 'params'],
                 },

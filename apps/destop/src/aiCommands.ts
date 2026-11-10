@@ -1,7 +1,16 @@
-import type { JsonDataset, ProjectModGroupKey } from '@baize-next/types'
+import { translateField } from '@baize-next/i18n'
+import type { JsonDataset, JsonValue, ProjectModGroupKey } from '@baize-next/types'
 
+import { getDefaultRecordTemplate, getRecordIdField } from './utils/defaultRecordTemplates'
 import { getGroupEnumOptions, GROUP_META_ENUM_FIELDS } from './utils/json'
-import { getSeidDefinitions, getSeidPropertyOptions, type SeidDrawerRecords, type SeidMetaDefinition } from './utils/seid'
+import {
+    getSeidDataKey,
+    getSeidDefinitions,
+    getSeidPropertyOptions,
+    isSeidProjectGroup,
+    type SeidDrawerRecords,
+    type SeidMetaDefinition,
+} from './utils/seid'
 
 /** 一条 slash 指令。 */
 export interface AiCommand {
@@ -78,7 +87,9 @@ export function filterAiCommands(commands: AiCommand[], query: string): AiComman
 
 /** 序列化单个 Seid 定义（属性类型、描述与可选项）。 */
 function formatSeidDefinition(definition: SeidMetaDefinition, datasets: JsonDataset[], records: SeidDrawerRecords): string {
-    const lines: string[] = [`- Seid ${definition.id} ${definition.name}（参数对象键：${definition.idField}）`]
+    const lines: string[] = [
+        `- Seid id=${definition.id}「${definition.name}」（write_seid 时 seidId 填 ${definition.id}，参数对象键：${definition.idField}）`,
+    ]
     if (definition.description) lines.push(`  - 说明：${definition.description}`)
     for (const property of definition.properties) {
         const options = getSeidPropertyOptions(property, datasets, records, [definition])
@@ -102,6 +113,39 @@ function buildFieldEnumSection(groupKey: ProjectModGroupKey, datasets: JsonDatas
     return lines
 }
 
+/** 根据默认值推断字段的类型描述。 */
+function describeFieldType(value: JsonValue): string {
+    if (Array.isArray(value)) return '数组'
+    if (typeof value === 'number') return '数字'
+    if (typeof value === 'string') return '字符串'
+    if (typeof value === 'boolean') return '布尔'
+    return '对象'
+}
+
+/**
+ * 构建分组的字段 schema 说明：字段名（类型）+ 中文名，供 AI 严格按照真实字段名生成数据。
+ * 这是避免 AI 臆造字段名（如把 name 写成 skillName）的关键上下文。
+ */
+function buildFieldSchemaSection(groupKey: ProjectModGroupKey): string[] {
+    const template = getDefaultRecordTemplate(groupKey)
+    const idField = getRecordIdField(groupKey)
+    if (!template) return []
+
+    const lines: string[] = ['请严格使用以下字段名生成记录 data，不要臆造或改名：']
+    // 主键字段优先展示。
+    if (idField) {
+        lines.push(`- ${idField}（数字）：记录主键，务必填写`)
+    }
+    for (const [field, defaultValue] of Object.entries(template)) {
+        if (field === idField) continue
+        const label = translateField(groupKey, field)
+        const typeText = describeFieldType(defaultValue)
+        const labelText = label !== field ? `，${label}` : ''
+        lines.push(`- ${field}（${typeText}）${labelText}`)
+    }
+    return lines
+}
+
 /**
  * 构建指令对应的 AI 上下文（system 提示片段）。
  * 根据指令绑定的分组注入字段枚举 meta，并注入该分组可用的 SeidMeta 定义（若记录含 seid 字段）。
@@ -115,6 +159,12 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
 
     sections.push(`## 目标分组：${command.groupKey}`)
 
+    const schemaLines = buildFieldSchemaSection(command.groupKey)
+    if (schemaLines.length > 0) {
+        sections.push('## 字段 schema')
+        sections.push(...schemaLines)
+    }
+
     const fieldLines = buildFieldEnumSection(command.groupKey, datasets)
     if (fieldLines.length > 0) {
         sections.push('## 字段枚举说明')
@@ -125,8 +175,10 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
         const definitions = command.seidMetaDatasets.flatMap(name => getSeidDefinitions(datasets, name))
         if (definitions.length > 0) {
             sections.push('## 可用 Seid 定义')
+            const seidDataKey = isSeidProjectGroup(command.groupKey) ? getSeidDataKey(command.groupKey, {}) : undefined
+            const dataKeyHint = seidDataKey ? `本分组（${command.groupKey}）的 Seid 参数应写入 dataKey=\`${seidDataKey}\`。` : ''
             sections.push(
-                '记录通过 `seid` 字段引用 Seid（值为 Seid 数字 id 数组），Seid 参数通过 `write_seid` 工具写入，参数对象以 Seid 的 idField 作为键。'
+                `记录通过 \`seid\` 字段引用 Seid（值为 Seid 数字 id 数组），Seid 参数通过 \`write_seid\` 工具写入，seidId 必须用下方列出的 Seid 数字 id，参数对象以 Seid 的 idField 作为键。${dataKeyHint}`
             )
             sections.push(...definitions.map(definition => formatSeidDefinition(definition, datasets, records)))
         }
@@ -137,10 +189,10 @@ export function buildCommandContext(command: AiCommand, datasets: JsonDataset[],
             '## 生成方式（使用工具）',
             '请通过工具调用完成生成，不要直接输出 JSON 文本：',
             '1. 生成前，若内容涉及引用已有 buff/功法/神通/物品（例如功法需要引用某个 buff、效果需要叠加某个已有 buff 等），先调用 `search_record` 工具查询对应分组，确认是否已有可复用的记录。',
-            '2. 查到已有记录时，直接引用其主键 id（如 buffid、Skill_ID），不要重复新建；查不到时才新建。',
-            '3. 用 `create_record` 工具写入主记录（目标分组），`key` 使用主键字段值（buff→buffid，功法/神通→Skill_ID，物品→id）。',
+            '2. 查到已有记录时，直接引用其主键 id（如 buffid、id），不要重复新建；查不到时才新建。',
+            '3. 用 `create_record` 工具写入主记录（目标分组），`key` 使用主键字段值（buff→buffid，功法/神通/物品/悟道→id），与 data 中的主键字段一致。',
             '4. 若主记录引用了其它 buff/物品（如功法引用了 buff、buff 又引用了物品），请递归地用 `create_record` 补写这些被引用的依赖记录。',
-            '5. 对每条含 seid 的记录，用 `write_seid` 工具写入每个 Seid 的参数（dataKey 取值 buff/skill/staticSkill/itemUse/itemEquip，与 Seid 所属分组对应）。',
+            '5. 对每条含 seid 的记录，用 `write_seid` 工具写入每个 Seid 的参数，`seidId` 用上文 Seid 定义里列出的数字 id，`dataKey` 按上文提示（buff→buff，神通→skill，功法/悟道→staticSkill，物品→itemUse/itemEquip），`targetKey` 与该记录的 key 一致。',
             '6. 若缺少生成所需的必要信息（尤其是 id 用多少），请优先调用 `ask_user` 工具向用户询问，而不是随意编造 id。',
             '7. 全部生成完成后，用一句简短的中文说明生成结果。',
         ].join('\n')

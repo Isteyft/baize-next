@@ -90,7 +90,8 @@ describe('buildCommandContext', () => {
             item: [],
         })
         expect(context).toContain('可用 Seid 定义')
-        expect(context).toContain('Seid 7 Element array')
+        expect(context).toContain('Seid id=7')
+        expect(context).toContain('Element array')
         expect(context).toContain('value1')
         expect(context).toContain('可选值：0 / 1')
     })
@@ -109,5 +110,15 @@ describe('buildCommandContext', () => {
         expect(context).toContain('write_seid')
         expect(context).toContain('递归')
         expect(context).toContain('ask_user')
+    })
+
+    it('injects field schema so AI uses real field names (e.g. name not skillName)', () => {
+        const command = AI_COMMANDS.find(item => item.id === 'skill')!
+        const context = buildCommandContext(command, [])
+        expect(context).toContain('字段 schema')
+        expect(context).toContain('请严格使用以下字段名生成记录')
+        // 功法名字段是 name，主键是 id。
+        expect(context).toMatch(/- name（字符串）/)
+        expect(context).toContain('- id（数字）：记录主键，务必填写')
     })
 })

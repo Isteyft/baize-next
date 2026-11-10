@@ -129,35 +129,36 @@ export function runToolCalls(
     const feedbacks: { callId: string; content: string }[] = []
 
     for (const call of toolCalls) {
-        const raw = parseToolArguments(call.arguments)
+        const name = call.function?.name ?? ''
+        const raw = parseToolArguments(call.function?.arguments ?? '{}')
         if (!raw) {
             feedbacks.push({ callId: call.id, content: '工具参数不是合法 JSON' })
             continue
         }
-        if (call.name === 'ask_user') {
+        if (name === 'ask_user') {
             const args = parseAskUserArgs(raw)
             if (args) askUser = args
             feedbacks.push({ callId: call.id, content: args ? '已向用户提问，等待回答' : 'ask_user 参数非法' })
             continue
         }
-        if (call.name === 'create_record') {
+        if (name === 'create_record') {
             const result = executor.createRecord(next, raw)
             next = result.next
             feedbacks.push({ callId: call.id, content: result.feedback })
             continue
         }
-        if (call.name === 'write_seid') {
+        if (name === 'write_seid') {
             const result = executor.writeSeid(next, raw)
             next = result.next
             feedbacks.push({ callId: call.id, content: result.feedback })
             continue
         }
-        if (call.name === 'search_record') {
+        if (name === 'search_record') {
             const feedback = executor.searchRecord(raw)
             feedbacks.push({ callId: call.id, content: feedback })
             continue
         }
-        feedbacks.push({ callId: call.id, content: `未知工具：${call.name}` })
+        feedbacks.push({ callId: call.id, content: `未知工具：${name}` })
     }
 
     return { next, askUser, feedbacks }

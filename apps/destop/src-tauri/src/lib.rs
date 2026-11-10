@@ -309,7 +309,13 @@ fn message_to_json(message: &ChatMessageInput) -> serde_json::Value {
     obj.insert("role".into(), serde_json::Value::String(message.role.clone()));
     match &message.content {
         Some(content) => {
-            obj.insert("content".into(), serde_json::Value::String(content.clone()));
+            // content 为空串时统一转 null：OpenAI/Kimi 协议中 content 应用 null 表示“无文本内容”，
+            // 空串 "" 会被部分模型（如 Kimi coding 接口）以「assistant must not be empty」拒绝。
+            if content.is_empty() {
+                obj.insert("content".into(), serde_json::Value::Null);
+            } else {
+                obj.insert("content".into(), serde_json::Value::String(content.clone()));
+            }
         }
         None => {
             obj.insert("content".into(), serde_json::Value::Null);
@@ -403,6 +409,8 @@ async fn chat_completion(
             let name = call["function"]["name"].as_str().unwrap_or_default().to_string();
             let arguments = call["function"]["arguments"]
                 .as_str()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
                 .unwrap_or("{}")
                 .to_string();
             tool_calls.push(ToolCallInput {

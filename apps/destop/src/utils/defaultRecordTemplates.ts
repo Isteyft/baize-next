@@ -210,7 +210,8 @@ function cloneJsonValue(value: JsonValue): JsonValue {
     return value
 }
 
-function getDefaultRecordTemplate(groupKey: ProjectModGroupKey): Record<string, JsonValue> | null {
+/** 返回分组 schema 的默认字段模板（字段名 -> 默认值）；无模板时返回 null。 */
+export function getDefaultRecordTemplate(groupKey: ProjectModGroupKey): Record<string, JsonValue> | null {
     const template = DEFAULT_RECORD_TEMPLATES[groupKey as keyof DefaultRecordTemplateMap]
     return template ? (template as unknown as Record<string, JsonValue>) : null
 }
